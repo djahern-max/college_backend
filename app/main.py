@@ -1,12 +1,12 @@
 """
-Main FastAPI application entry point.
+Main FastAPI application entry point - Updated with auth routes.
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.core.config.settings import get_settings
-from app.api.endpoints import health, users
+from app.api.endpoints import health, users, auth
 from app.db.database import engine, create_tables
 
 
@@ -43,6 +43,7 @@ def create_application() -> FastAPI:
     # Include routers
     app.include_router(health.router, prefix="/api/v1", tags=["health"])
     app.include_router(users.router, prefix="/api/v1", tags=["users"])
+    app.include_router(auth.router, prefix="/api/v1", tags=["authentication"])
 
     return app
 
