@@ -149,10 +149,17 @@ class ScholarshipSummary(BaseModel):
     id: int
     title: str
     provider: str
-    amount_min: Optional[Decimal]
-    amount_max: Optional[Decimal]
-    amount_exact: Optional[Decimal]
-    deadline: Optional[date]
+    amount_min: Optional[Decimal] = None
+    amount_max: Optional[Decimal] = None
+    amount_exact: Optional[Decimal] = None
+    deadline: Optional[date] = None
     scholarship_type: ScholarshipType
-    categories: Optional[List[str]]
+    categories: Optional[List[str]] = None
     verified: bool
+    
+    # 🔧 ADD THESE MISSING FIELDS:
+    renewable: bool = False
+    application_url: Optional[str] = Field(None, max_length=500)
+    contact_email: Optional[str] = Field(None, max_length=255)
+    description: Optional[str] = None
+    created_at: datetime
