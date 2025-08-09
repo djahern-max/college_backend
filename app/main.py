@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.core.config.settings import get_settings
-from app.api.endpoints import health, users, auth
+from app.api.endpoints import health, users, auth, statistics, reviews
 from app.db.database import engine, create_tables
 from app.api.endpoints.scholarship import router as scholarship_router
 import logging
@@ -48,7 +48,9 @@ def create_application() -> FastAPI:
     app.include_router(users.router, prefix="/api/v1", tags=["users"])
     app.include_router(auth.router, prefix="/api/v1", tags=["authentication"])
     app.include_router(scholarship_router, prefix="/api/v1", tags=["scholarships"])
-
+    app.include_router(statistics.router, prefix="/api/v1", tags=["statistics"])
+    app.include_router(reviews.router, prefix="/api/v1", tags=["reviews"])
+    
     return app
 
 
