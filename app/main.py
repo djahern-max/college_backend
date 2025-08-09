@@ -8,7 +8,10 @@ from contextlib import asynccontextmanager
 from app.core.config.settings import get_settings
 from app.api.endpoints import health, users, auth
 from app.db.database import engine, create_tables
+from app.api.endpoints.scholarship import router as scholarship_router
+import logging
 
+logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -44,6 +47,7 @@ def create_application() -> FastAPI:
     app.include_router(health.router, prefix="/api/v1", tags=["health"])
     app.include_router(users.router, prefix="/api/v1", tags=["users"])
     app.include_router(auth.router, prefix="/api/v1", tags=["authentication"])
+    app.include_router(scholarship_router, prefix="/api/v1", tags=["scholarships"])
 
     return app
 
