@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any, Tuple
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 from app.db.repositories.scholarship import ScholarshipRepository
 from app.models.scholarship import Scholarship, ScholarshipStatus
@@ -15,7 +15,7 @@ from app.schemas.scholarship import (
 class ScholarshipService:
     """Service layer for scholarship operations"""
     
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
         self.repository = ScholarshipRepository(db)
     
@@ -24,21 +24,25 @@ class ScholarshipService:
         try:
             # Check if scholarship with same external_id and source already exists
             if hasattr(scholarship_data, 'external_id') and hasattr(scholarship_data, 'source'):
-                if scholarship_data.external_id and scholarship_data.source:
-                    existing = self.repository.get_by_external_id(
-                        scholarship_data.external_id, 
-                        scholarship_data.source
-                    )
+                external_id = getattr(scholarship_data, 'external_id', None)
+                source = getattr(scholarship_data, 'source', None)
+                if external_id and source:
+                    existing = await self.repository.get_by_external_id(external_id, source)
                     if existing:
                         raise HTTPException(
                             status_code=status.HTTP_400_BAD_REQUEST,
                             detail="Scholarship with this external ID already exists"
                         )
             
-            scholarship = self.repository.create(scholarship_data)
-            return ScholarshipResponse.from_orm(scholarship)
+            scholarship = await self.repository.create(scholarship_data)
+            # Don't manually commit here - let the dependency handle it
+            return ScholarshipResponse.model_validate(scholarship)
             
+        except HTTPException:
+            await self.db.rollback()
+            raise
         except Exception as e:
+            await self.db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error creating scholarship: {str(e)}"
@@ -46,13 +50,13 @@ class ScholarshipService:
     
     async def get_scholarship(self, scholarship_id: int) -> ScholarshipResponse:
         """Get a scholarship by ID"""
-        scholarship = self.repository.get(scholarship_id)
+        scholarship = await self.repository.get(scholarship_id)
         if not scholarship:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Scholarship not found"
             )
-        return ScholarshipResponse.from_orm(scholarship)
+        return ScholarshipResponse.model_validate(scholarship)
     
     async def update_scholarship(
         self, 
@@ -60,7 +64,7 @@ class ScholarshipService:
         scholarship_data: ScholarshipUpdate
     ) -> ScholarshipResponse:
         """Update a scholarship"""
-        scholarship = self.repository.get(scholarship_id)
+        scholarship = await self.repository.get(scholarship_id)
         if not scholarship:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -68,9 +72,10 @@ class ScholarshipService:
             )
         
         try:
-            updated_scholarship = self.repository.update(scholarship, scholarship_data)
-            return ScholarshipResponse.from_orm(updated_scholarship)
+            updated_scholarship = await self.repository.update(scholarship, scholarship_data)
+            return ScholarshipResponse.model_validate(updated_scholarship)
         except Exception as e:
+            await self.db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Error updating scholarship: {str(e)}"
@@ -78,7 +83,7 @@ class ScholarshipService:
     
     async def delete_scholarship(self, scholarship_id: int) -> bool:
         """Delete a scholarship (soft delete by setting status to inactive)"""
-        scholarship = self.repository.get(scholarship_id)
+        scholarship = await self.repository.get(scholarship_id)
         if not scholarship:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -87,7 +92,6 @@ class ScholarshipService:
         
         # Soft delete by updating status
         scholarship.status = ScholarshipStatus.INACTIVE
-        self.db.commit()
         return True
     
     async def search_scholarships(
@@ -96,10 +100,10 @@ class ScholarshipService:
     ) -> Tuple[List[ScholarshipSummary], int]:
         """Search scholarships with filters"""
         try:
-            results, total_count = self.repository.search_scholarships(search_params)
+            results, total_count = await self.repository.search_scholarships(search_params)
             
             # Convert to summary format for list view
-            summaries = [ScholarshipSummary.from_orm(scholarship) for scholarship in results]
+            summaries = [ScholarshipSummary.model_validate(scholarship) for scholarship in results]
             
             return summaries, total_count
             
@@ -115,18 +119,18 @@ class ScholarshipService:
         offset: int = 0
     ) -> List[ScholarshipSummary]:
         """Get active scholarships"""
-        scholarships = self.repository.get_active_scholarships(limit, offset)
-        return [ScholarshipSummary.from_orm(scholarship) for scholarship in scholarships]
+        scholarships = await self.repository.get_active_scholarships(limit, offset)
+        return [ScholarshipSummary.model_validate(scholarship) for scholarship in scholarships]
     
     async def get_expiring_soon(self, days: int = 30) -> List[ScholarshipSummary]:
         """Get scholarships expiring within specified days"""
-        scholarships = self.repository.get_expiring_soon(days)
-        return [ScholarshipSummary.from_orm(scholarship) for scholarship in scholarships]
+        scholarships = await self.repository.get_expiring_soon(days)
+        return [ScholarshipSummary.model_validate(scholarship) for scholarship in scholarships]
     
     async def get_by_provider(self, provider: str, limit: int = 50) -> List[ScholarshipSummary]:
         """Get scholarships by provider"""
-        scholarships = self.repository.get_by_provider(provider, limit)
-        return [ScholarshipSummary.from_orm(scholarship) for scholarship in scholarships]
+        scholarships = await self.repository.get_by_provider(provider, limit)
+        return [ScholarshipSummary.model_validate(scholarship) for scholarship in scholarships]
     
     async def get_by_categories(
         self, 
@@ -134,12 +138,12 @@ class ScholarshipService:
         limit: int = 50
     ) -> List[ScholarshipSummary]:
         """Get scholarships by categories"""
-        scholarships = self.repository.get_by_categories(categories, limit)
-        return [ScholarshipSummary.from_orm(scholarship) for scholarship in scholarships]
+        scholarships = await self.repository.get_by_categories(categories, limit)
+        return [ScholarshipSummary.model_validate(scholarship) for scholarship in scholarships]
     
     async def mark_as_verified(self, scholarship_id: int) -> ScholarshipResponse:
         """Mark a scholarship as verified"""
-        if not self.repository.mark_as_verified(scholarship_id):
+        if not await self.repository.mark_as_verified(scholarship_id):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Scholarship not found"
@@ -149,11 +153,12 @@ class ScholarshipService:
     
     async def increment_application_count(self, scholarship_id: int) -> bool:
         """Increment application count for a scholarship"""
-        return self.repository.update_application_count(scholarship_id, 1)
+        result = await self.repository.update_application_count(scholarship_id, 1)
+        return result
     
     async def get_statistics(self) -> Dict[str, Any]:
         """Get scholarship statistics"""
-        return self.repository.get_statistics()
+        return await self.repository.get_statistics()
     
     async def bulk_create_scholarships(
         self, 
@@ -165,8 +170,8 @@ class ScholarshipService:
         
         for i, scholarship_data in enumerate(scholarships_data):
             try:
-                scholarship = self.repository.create(scholarship_data)
-                created_scholarships.append(ScholarshipResponse.from_orm(scholarship))
+                scholarship = await self.repository.create(scholarship_data)
+                created_scholarships.append(ScholarshipResponse.model_validate(scholarship))
             except Exception as e:
                 errors.append(f"Error creating scholarship {i + 1}: {str(e)}")
         

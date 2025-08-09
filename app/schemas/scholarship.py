@@ -1,6 +1,6 @@
-from pydantic import BaseModel, Field, validator, HttpUrl
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import Optional, List, Dict, Any
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from app.models.scholarship import ScholarshipStatus, ScholarshipType
 
@@ -39,19 +39,21 @@ class ScholarshipBase(BaseModel):
     scholarship_type: ScholarshipType = Field(default=ScholarshipType.MERIT, description="Type of scholarship")
     keywords: Optional[List[str]] = Field(None, description="Search keywords")
     
-    @validator('amount_max')
-    def validate_amount_range(cls, v, values):
+    @field_validator('amount_max')
+    @classmethod
+    def validate_amount_range(cls, v, info):
         """Ensure max amount is greater than min amount"""
-        if v is not None and 'amount_min' in values and values['amount_min'] is not None:
-            if v < values['amount_min']:
+        if v is not None and 'amount_min' in info.data and info.data['amount_min'] is not None:
+            if v < info.data['amount_min']:
                 raise ValueError('Maximum amount must be greater than or equal to minimum amount')
         return v
     
-    @validator('end_date')
-    def validate_date_range(cls, v, values):
+    @field_validator('end_date')
+    @classmethod
+    def validate_date_range(cls, v, info):
         """Ensure end date is after start date"""
-        if v is not None and 'start_date' in values and values['start_date'] is not None:
-            if v < values['start_date']:
+        if v is not None and 'start_date' in info.data and info.data['start_date'] is not None:
+            if v < info.data['start_date']:
                 raise ValueError('End date must be after start date')
         return v
 
@@ -97,6 +99,8 @@ class ScholarshipUpdate(BaseModel):
 
 class ScholarshipResponse(ScholarshipBase):
     """Schema for scholarship responses"""
+    model_config = ConfigDict(from_attributes=True)
+    
     id: int
     status: ScholarshipStatus
     external_id: Optional[str] = None
@@ -105,11 +109,8 @@ class ScholarshipResponse(ScholarshipBase):
     verified: bool
     last_verified: Optional[date] = None
     application_count: int
-    created_at: date
-    updated_at: date
-    
-    class Config:
-        from_attributes = True
+    created_at: datetime
+    updated_at: Optional[datetime] = None
 
 
 class ScholarshipSearch(BaseModel):
@@ -138,11 +139,13 @@ class ScholarshipSearch(BaseModel):
     
     # Sorting
     sort_by: str = Field(default="created_at", description="Field to sort by")
-    sort_order: str = Field(default="desc", regex="^(asc|desc)$", description="Sort order")
+    sort_order: str = Field(default="desc", pattern="^(asc|desc)$", description="Sort order")
 
 
 class ScholarshipSummary(BaseModel):
     """Schema for scholarship summary/list view"""
+    model_config = ConfigDict(from_attributes=True)
+    
     id: int
     title: str
     provider: str
@@ -153,6 +156,3 @@ class ScholarshipSummary(BaseModel):
     scholarship_type: ScholarshipType
     categories: Optional[List[str]]
     verified: bool
-    
-    class Config:
-        from_attributes = True

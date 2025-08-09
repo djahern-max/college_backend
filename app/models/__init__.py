@@ -1,9 +1,8 @@
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.models.scholarship import Scholarship, ScholarshipStatus, ScholarshipType
 
 __all__ = [
-    "User", 
-    "UserRole",
+    "User",
     "Scholarship",
     "ScholarshipStatus", 
     "ScholarshipType"

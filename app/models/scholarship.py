@@ -1,6 +1,7 @@
-from sqlalchemy import Column, String, Text, Numeric, Date, Boolean, JSON, Enum
+from sqlalchemy import Column, String, Text, Numeric, Date, Boolean, JSON, Enum, Integer, DateTime
+from sqlalchemy.sql import func
 import enum
-from app.db.base import Base
+from app.db.database import Base
 
 
 class ScholarshipStatus(str, enum.Enum):
@@ -29,6 +30,13 @@ class Scholarship(Base):
     Scholarship model for storing scholarship opportunities
     """
     __tablename__ = "scholarships"
+    
+    # Primary key
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Basic Information
     title = Column(String(255), nullable=False, index=True)
