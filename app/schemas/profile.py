@@ -181,6 +181,7 @@ class UserProfileUpdate(BaseModel):
     # Profile Photo
     profile_photo_url: Optional[str] = None
     profile_photo_filename: Optional[str] = None
+    profile_photo_uploaded_at: Optional[datetime] = None
     
     # Address Information
     street_address: Optional[str] = None
@@ -231,7 +232,10 @@ class UserProfileUpdate(BaseModel):
     
     # Privacy Settings
     field_privacy_settings: Optional[Dict[str, VisibilityLevel]] = None
-
+    
+    # Profile Completion (ADD THESE MISSING FIELDS)
+    profile_completed: Optional[bool] = None
+    completion_percentage: Optional[int] = None
 
 class UserProfilePrivacyUpdate(BaseModel):
     """Schema specifically for updating privacy settings."""
