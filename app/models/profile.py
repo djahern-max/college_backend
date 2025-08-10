@@ -1,6 +1,7 @@
 """
 User Profile database model for scholarship applications.
 """
+from __future__ import annotations
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Date, Text, JSON, ForeignKey, Numeric
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
