@@ -3,6 +3,7 @@ Main FastAPI application entry point - Updated with auth routes.
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from app.core.config.settings import get_settings
 from app.api.endpoints import health, users, auth, statistics, reviews, profiles
@@ -33,14 +34,17 @@ def create_application() -> FastAPI:
         lifespan=lifespan
     )
 
-    # Configure CORS
+    # Add CORS middleware if not already configured
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.BACKEND_CORS_ORIGINS,
+        allow_origins=["http://localhost:3000"],  # Your Next.js frontend
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Mount the uploads directory to serve static files
+    app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
     # Include routers
     app.include_router(health.router, prefix="/api/v1", tags=["health"])
