@@ -16,6 +16,11 @@ class UserProfile(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
     
+    # Privacy and Settings
+    profile_visibility = Column(String(20), nullable=False, default="private")  # "public", "private", "friends", "scholarship_only"
+    allow_scholarship_matching = Column(Boolean, nullable=False, default=True)
+    field_privacy_settings = Column(JSON, nullable=True)  # Field-level privacy settings
+    
     # Personal Information
     middle_name = Column(String(100), nullable=True)
     phone = Column(String(20), nullable=True)
@@ -62,20 +67,20 @@ class UserProfile(Base):
     
     # College Plans
     intended_major = Column(String(255), nullable=True)
-    college_preferences = Column(JSON, nullable=True)  # List of colleges interested in
+    college_preferences = Column(JSON, nullable=True)  # List of preferred colleges
     career_goals = Column(Text, nullable=True)
     
-    # Essay/Personal Statement Storage
+    # Essays/Personal Statements
     personal_statement = Column(Text, nullable=True)
     career_essay = Column(Text, nullable=True)
-    athletic_impact_essay = Column(Text, nullable=True)  # For Fisher Cats video content
+    athletic_impact_essay = Column(Text, nullable=True)
     
     # References
-    references = Column(JSON, nullable=True)  # Contact info for references
+    references = Column(JSON, nullable=True)  # List of reference objects
     
-    # Profile Completion
-    profile_completed = Column(Boolean, default=False)
-    completion_percentage = Column(Integer, default=0)
+    # Profile Completion Tracking
+    profile_completed = Column(Boolean, nullable=False, default=False)
+    completion_percentage = Column(Integer, nullable=False, default=0)
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -86,5 +91,3 @@ class UserProfile(Base):
     
     def __repr__(self):
         return f"<UserProfile(id={self.id}, user_id={self.user_id}, completed={self.profile_completed})>"
-
-

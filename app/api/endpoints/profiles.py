@@ -126,15 +126,24 @@ async def get_profile_summary(
             user_id=current_user.id,
             profile_completed=False,
             completion_percentage=0,
-            profile_visibility="private"
+            profile_visibility="private",  # Default value
+            high_school_name=None,
+            graduation_year=None,
+            sports_played=[],
+            updated_at=None
         )
+    
+    # Handle the case where profile_visibility might not exist in the database yet
+    profile_visibility = getattr(profile, 'profile_visibility', 'private')
+    profile_completed = getattr(profile, 'profile_completed', False)
+    completion_percentage = getattr(profile, 'completion_percentage', 0)
     
     return UserProfileSummary(
         id=profile.id,
         user_id=profile.user_id,
-        profile_completed=profile.profile_completed or False,
-        completion_percentage=profile.completion_percentage or 0,
-        profile_visibility=profile.profile_visibility or "private",
+        profile_completed=profile_completed,
+        completion_percentage=completion_percentage,
+        profile_visibility=profile_visibility,
         high_school_name=profile.high_school_name,
         graduation_year=profile.graduation_year,
         sports_played=profile.sports_played or [],
