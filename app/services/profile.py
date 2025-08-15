@@ -42,7 +42,7 @@ class ProfileService:
         
         profile = UserProfile(**profile_dict)
         self.db.add(profile)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(profile)
         
         return profile
@@ -65,8 +65,10 @@ class ProfileService:
                 .values(**update_dict)
             )
             
+            # Flush to make changes visible in this transaction
+            await self.db.flush()
+            
             # Get updated profile to recalculate completion
-            await self.db.commit()
             updated_profile = await self.get(profile_id)
             
             if updated_profile:
@@ -82,7 +84,9 @@ class ProfileService:
                         profile_completed=profile_completed
                     )
                 )
-                await self.db.commit()
+                
+                # Flush again but don't commit - let endpoint handle commit
+                await self.db.flush()
                 
                 # Get final updated profile
                 return await self.get(profile_id)
@@ -94,7 +98,8 @@ class ProfileService:
         result = await self.db.execute(
             delete(UserProfile).where(UserProfile.id == profile_id)
         )
-        await self.db.commit()
+        # DON'T commit here - let the endpoint dependency handle it
+        await self.db.flush()  # Just flush to make the change visible
         return result.rowcount > 0
     
     async def get_multi(self, skip: int = 0, limit: int = 100) -> List[UserProfile]:

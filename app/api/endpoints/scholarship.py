@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Dict, Any  # Added Dict, Any
 from datetime import datetime
 
 from app.api.dependencies.database import get_db
@@ -200,6 +200,61 @@ async def get_scholarships_by_categories(
     service = ScholarshipService(db)
     return await service.get_by_categories(categories_list, limit)
 
+@router.get(
+    "/my-matches",
+    response_model=Dict[str, Any],
+    summary="Get scholarship matches for current user",
+    description="Get personalized scholarship matches based on user profile"
+)
+async def get_my_scholarship_matches(
+    limit: int = Query(10, ge=1, le=50, description="Number of matches to return"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get scholarship matches for the current user."""
+    from app.services.scholarship_matching import ScholarshipMatchingService
+    
+    matching_service = ScholarshipMatchingService(db)
+    matches, avg_score = await matching_service.find_matches_for_user(
+        current_user.id, 
+        limit
+    )
+    
+    return {
+        "matches": matches,
+        "total_matches": len(matches),
+        "average_match_score": avg_score,
+        "user_id": current_user.id
+    }
+
+@router.get(
+    "/user-matches/{user_id}",
+    response_model=Dict[str, Any],
+    summary="Get scholarship matches for specific user",
+    description="Get personalized scholarship matches for a specific user (admin only)"
+)
+async def get_user_scholarship_matches(
+    user_id: int,
+    limit: int = Query(10, ge=1, le=50, description="Number of matches to return"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get scholarship matches for a specific user (admin only)."""
+    from app.services.scholarship_matching import ScholarshipMatchingService
+    
+    matching_service = ScholarshipMatchingService(db)
+    matches, avg_score = await matching_service.find_matches_for_user(
+        user_id, 
+        limit
+    )
+    
+    return {
+        "matches": matches,
+        "total_matches": len(matches),
+        "average_match_score": avg_score,
+        "user_id": user_id
+    }
+
 
 @router.get(
     "/{scholarship_id}",
@@ -303,3 +358,10 @@ async def create_bulk_scholarships(
     """Create multiple scholarships in bulk"""
     service = ScholarshipService(db)
     return await service.bulk_create_scholarships(scholarships)
+
+
+
+
+
+
+
