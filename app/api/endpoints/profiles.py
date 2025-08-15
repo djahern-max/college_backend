@@ -399,3 +399,91 @@ async def upload_essay(
         "message": f"{essay_type.replace('_', ' ').title()} uploaded successfully",
         "essay_type": essay_type
     }
+
+@router.get("/profiles/view")
+async def get_profile_view(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get complete profile view with all sections for display."""
+    profile_service = ProfileService(db)
+    profile = await profile_service.get_by_user_id(current_user.id)
+    
+    if not profile:
+        # Return empty structure if no profile exists
+        return {
+            "user": {
+                "first_name": current_user.first_name or "",
+                "last_name": current_user.last_name or "",
+                "email": current_user.email
+            },
+            "basic_info": {},
+            "academics": {
+                "honors_courses": [],
+                "academic_awards": []
+            },
+            "athletics": {
+                "sports_played": [],
+                "athletic_awards": []
+            },
+            "community": {
+                "volunteer_organizations": []
+            },
+            "activities": {
+                "extracurricular_activities": []
+            },
+            "completion": {
+                "profile_completed": False,
+                "completion_percentage": 0
+            },
+            "uploads": {}
+        }
+    
+    # Format the response to match the frontend interface
+    return {
+        "user": {
+            "first_name": current_user.first_name or "",
+            "last_name": current_user.last_name or "",
+            "email": current_user.email
+        },
+        "basic_info": {
+            "high_school_name": profile.high_school_name,
+            "graduation_year": profile.graduation_year,
+            "city": profile.city,
+            "state": profile.state,
+            "phone": profile.phone,
+            "date_of_birth": profile.date_of_birth.isoformat() if profile.date_of_birth else None
+        },
+        "academics": {
+            "gpa": profile.gpa,
+            "sat_score": profile.sat_score,
+            "act_score": profile.act_score,
+            "honors_courses": profile.honors_courses or [],
+            "academic_awards": profile.academic_awards or []
+        },
+        "athletics": {
+            "sports_played": profile.sports_played or [],
+            "athletic_awards": profile.athletic_awards or []
+        },
+        "community": {
+            "volunteer_organizations": profile.volunteer_organizations or [],
+            "volunteer_hours": profile.volunteer_hours
+        },
+        "activities": {
+            "extracurricular_activities": profile.extracurricular_activities or [],
+            "intended_major": profile.intended_major,
+            "career_goals": profile.career_goals
+        },
+        "completion": {
+            "profile_completed": profile.profile_completed,
+            "completion_percentage": profile.completion_percentage,
+            "created_at": profile.created_at.isoformat() if profile.created_at else None,
+            "updated_at": profile.updated_at.isoformat() if profile.updated_at else None
+        },
+        "uploads": {
+            "profile_photo_url": profile.profile_photo_url,
+            "personal_statement": profile.personal_statement,
+            "career_essay": profile.career_essay,
+            "athletic_impact_essay": profile.athletic_impact_essay
+        }
+    }

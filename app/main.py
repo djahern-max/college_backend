@@ -9,6 +9,8 @@ from app.core.config.settings import get_settings
 from app.api.endpoints import health, users, auth, statistics, reviews, profiles
 from app.db.database import engine, create_tables
 from app.api.endpoints.scholarship import router as scholarship_router
+from fastapi.responses import PlainTextResponse
+from fastapi.routing import APIRoute
 import logging
 
 logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
@@ -59,6 +61,18 @@ def create_application() -> FastAPI:
 
 
 app = create_application()
+
+@app.get("/routes-simple", response_class=PlainTextResponse)
+async def get_routes_simple():
+    """
+    Returns a concise list of all routes with their paths and methods.
+    """
+    routes = []
+    for route in app.routes:
+        if isinstance(route, APIRoute):
+            methods = ", ".join(route.methods)
+            routes.append(f"{methods}: {route.path}")
+    return "\n".join(routes)
 
 
 if __name__ == "__main__":
