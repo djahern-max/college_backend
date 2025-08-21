@@ -9,8 +9,6 @@ This module contains all SQLAlchemy models that define our database structure:
 """
 
 from .user import User
-from .profile import UserProfile
-from .oauth import OAuthAccount, OAuthState
 
 # Export all models for easy importing
 __all__ = ["User", "UserProfile", "OAuthAccount", "OAuthState"]

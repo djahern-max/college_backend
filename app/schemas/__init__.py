@@ -9,7 +9,6 @@ These schemas define the structure of data that flows between the frontend and b
 Schema categories:
 - auth: Authentication and authorization
 - user: User management and profiles
-- profile: Student profiles for scholarship matching
 """
 
 from .auth import (
@@ -19,49 +18,42 @@ from .auth import (
     LoginResponse,
     RefreshTokenRequest,
     OAuthLoginRequest,
-    OAuthURL
+    OAuthURL,
 )
 
-from .user import (
-    UserBase,
-    UserCreate,
-    UserUpdate,
-    UserResponse,
-    UserInDB
-)
+from .user import UserBase, UserCreate, UserUpdate, UserResponse, UserInDB
 
-from .profile import (
-    ProfileBase,
-    ProfileCreate,
-    ProfileUpdate,
-    ProfileResponse,
-    ProfileSummary,
-    ProfileFieldUpdate
-)
+# Import profile schemas when available:
+# from .profile import (
+#     ProfileBase,
+#     ProfileCreate,
+#     ProfileUpdate,
+#     ProfileResponse,
+#     ProfileSummary,
+#     ProfileFieldUpdate
+# )
 
 # Export all schemas
 __all__ = [
     # Auth schemas
     "Token",
-    "TokenData", 
+    "TokenData",
     "LoginRequest",
     "LoginResponse",
     "RefreshTokenRequest",
     "OAuthLoginRequest",
     "OAuthURL",
-    
     # User schemas
     "UserBase",
     "UserCreate",
-    "UserUpdate", 
+    "UserUpdate",
     "UserResponse",
     "UserInDB",
-    
-    # Profile schemas
-    "ProfileBase",
-    "ProfileCreate",
-    "ProfileUpdate",
-    "ProfileResponse", 
-    "ProfileSummary",
-    "ProfileFieldUpdate"
+    # Profile schemas (when available)
+    # "ProfileBase",
+    # "ProfileCreate",
+    # "ProfileUpdate",
+    # "ProfileResponse",
+    # "ProfileSummary",
+    # "ProfileFieldUpdate"
 ]
