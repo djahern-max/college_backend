@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.v1 import auth, users
+from fastapi.routing import APIRoute
+from fastapi.responses import PlainTextResponse
 
 # Import profiles and oauth when they're available:
 # from app.api.v1 import profiles, oauth
@@ -39,3 +41,17 @@ async def root():
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "CampusConnect API"}
+
+
+@app.get("/routes-simple", response_class=PlainTextResponse)
+async def get_routes_simple():
+    """
+    Returns a concise list of all routes with their paths and methods.
+    """
+    routes = []
+    for route in app.routes:
+        if isinstance(route, APIRoute):
+            methods = ", ".join(route.methods)
+            routes.append(f"{methods}: {route.path}")
+
+    return "\n".join(routes)
