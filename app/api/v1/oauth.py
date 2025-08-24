@@ -20,37 +20,54 @@ oauth_service = OAuthService()
 
 @router.get("/google/url")
 async def get_google_oauth_url(db: AsyncSession = Depends(get_db)):
-    """Generate Google OAuth authorization URL"""
+    import logging, os
 
-    # Generate secure state parameter
-    state = secrets.token_urlsafe(32)
+    logger = logging.getLogger("oauth")
 
-    # Store state in database for verification
-    oauth_state = OAuthState(
-        state=state,
-        provider="google",
-        created_at=datetime.utcnow(),
-        expires_at=datetime.utcnow() + timedelta(minutes=10),
-    )
-    db.add(oauth_state)
-    await db.commit()
+    try:
+        # 1) Generate state
+        state = secrets.token_urlsafe(32)
+        logger.info("Generating OAuth state %s", state[:8])
 
-    # Build authorization URL
-    params = {
-        "client_id": settings.GOOGLE_CLIENT_ID,
-        "redirect_uri": settings.GOOGLE_REDIRECT_URI,
-        "scope": "openid email profile",
-        "response_type": "code",
-        "access_type": "offline",
-        "prompt": "consent",
-        "state": state,
-    }
+        # 2) Sanity-check config (soft-fail logging)
+        logger.info("GOOGLE_CLIENT_ID set? %s", bool(settings.GOOGLE_CLIENT_ID))
+        logger.info("GOOGLE_REDIRECT_URI: %s", settings.GOOGLE_REDIRECT_URI)
 
-    auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(
-        params
-    )
+        # 3) Persist state
+        oauth_state = OAuthState(
+            state=state,
+            provider="google",
+            created_at=datetime.utcnow(),
+            expires_at=datetime.utcnow() + timedelta(minutes=10),
+        )
+        db.add(oauth_state)
+        await db.commit()
+        logger.info("OAuthState committed for provider=google")
 
-    return {"url": auth_url, "state": state}
+        # 4) Build URL
+        params = {
+            "client_id": settings.GOOGLE_CLIENT_ID,
+            "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+            "scope": "openid email profile",
+            "response_type": "code",
+            "access_type": "offline",
+            "prompt": "consent",
+            "state": state,
+        }
+        auth_url = (
+            "https://accounts.google.com/o/oauth2/v2/auth?"
+            + urllib.parse.urlencode(params)
+        )
+        return {"url": auth_url, "state": state}
+
+    except Exception as e:
+        # TEMP: show a clear error instead of generic 500 (remove later)
+        logger.exception("Failed to build Google OAuth URL")
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=500, detail=f"/google/url failed: {type(e).__name__}: {e}"
+        )
 
 
 @router.get("/linkedin/url")
