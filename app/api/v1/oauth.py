@@ -20,7 +20,12 @@ oauth_service = OAuthService()
 
 @router.get("/google/url")
 async def get_google_oauth_url(db: AsyncSession = Depends(get_db)):
-    import logging, os
+    import logging
+    import secrets
+    import urllib.parse
+    from datetime import datetime, timedelta
+    from fastapi import HTTPException
+    from app.core.config import settings
 
     logger = logging.getLogger("oauth")
 
@@ -33,15 +38,21 @@ async def get_google_oauth_url(db: AsyncSession = Depends(get_db)):
         logger.info("GOOGLE_CLIENT_ID set? %s", bool(settings.GOOGLE_CLIENT_ID))
         logger.info("GOOGLE_REDIRECT_URI: %s", settings.GOOGLE_REDIRECT_URI)
 
-        # 3) Persist state
+        # 3) Persist state - FIX: Make sure OAuthState is imported
+        from app.models.oauth import OAuthState  # Add this import
+
         oauth_state = OAuthState(
             state=state,
             provider="google",
             created_at=datetime.utcnow(),
             expires_at=datetime.utcnow() + timedelta(minutes=10),
         )
+
+        # FIX: Use proper async session handling
         db.add(oauth_state)
-        await db.commit()
+        await db.commit()  # This should work if db is properly injected
+        await db.refresh(oauth_state)  # Optional: refresh to get the ID
+
         logger.info("OAuthState committed for provider=google")
 
         # 4) Build URL
@@ -61,9 +72,11 @@ async def get_google_oauth_url(db: AsyncSession = Depends(get_db)):
         return {"url": auth_url, "state": state}
 
     except Exception as e:
-        # TEMP: show a clear error instead of generic 500 (remove later)
-        logger.exception("Failed to build Google OAuth URL")
-        from fastapi import HTTPException
+        # Enhanced error logging
+        logger.exception("Failed to build Google OAuth URL: %s", str(e))
+        logger.error("Exception type: %s", type(e).__name__)
+        logger.error("DB object: %s", db)
+        logger.error("DB type: %s", type(db))
 
         raise HTTPException(
             status_code=500, detail=f"/google/url failed: {type(e).__name__}: {e}"
