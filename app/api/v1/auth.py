@@ -1,151 +1,93 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from fastapi.responses import RedirectResponse
-from sqlalchemy.orm import Session  # Fixed: Use regular Session, not AsyncSession
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
+
 from app.core.database import get_db
-from app.api.deps import get_current_user
-from app.models.oauth import OAuthState, OAuthAccount
-from app.models.user import User
-from app.core.config import settings
 from app.core.security import create_access_token
-from sqlalchemy import select
-import secrets
-import urllib.parse
-from datetime import datetime, timedelta
-from typing import Optional
+from app.services.user import UserService
+from app.schemas.auth import LoginResponse
+from app.schemas.user import UserResponse, UserCreate
+from app.api.deps import get_current_user
 
 router = APIRouter()
 
 
-@router.get("/google/url")
-async def get_google_oauth_url(
-    db: Session = Depends(get_db),
-):  # Fixed: Session not AsyncSession
-    """Generate Google OAuth authorization URL"""
+@router.post("/register", response_model=UserResponse)
+async def register(user_data: UserCreate, db: Session = Depends(get_db)):
+    """Register a new user"""
+    user_service = UserService(db)
 
-    # Generate secure state parameter
-    state = secrets.token_urlsafe(32)
+    # Check if email already exists
+    if user_service.is_email_taken(user_data.email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
+        )
 
-    # Store state in database for verification
-    oauth_state = OAuthState(
-        state=state,
-        provider="google",
-        created_at=datetime.utcnow(),
-        expires_at=datetime.utcnow() + timedelta(minutes=10),
-    )
-    db.add(oauth_state)
-    db.commit()  # Fixed: removed await
+    # Check if username already exists
+    if user_service.is_username_taken(user_data.username):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Username already taken"
+        )
 
-    # Build authorization URL
-    params = {
-        "client_id": settings.GOOGLE_CLIENT_ID,
-        "redirect_uri": settings.GOOGLE_REDIRECT_URI,
-        "scope": "openid email profile",
-        "response_type": "code",
-        "access_type": "offline",
-        "prompt": "consent",
-        "state": state,
-    }
-
-    auth_url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(
-        params
-    )
-
-    return {"url": auth_url, "state": state}
+    # Create the user
+    user = user_service.create_user(user_data)
+    return UserResponse.from_orm(user)
 
 
-@router.get("/linkedin/url")
-async def get_linkedin_oauth_url(db: Session = Depends(get_db)):
-    """Generate LinkedIn OAuth authorization URL"""
-
-    # Generate secure state parameter
-    state = secrets.token_urlsafe(32)
-
-    # Store state in database for verification
-    oauth_state = OAuthState(
-        state=state,
-        provider="linkedin",
-        created_at=datetime.utcnow(),
-        expires_at=datetime.utcnow() + timedelta(minutes=10),
-    )
-    db.add(oauth_state)
-    db.commit()  # Fixed: removed await
-
-    # Build authorization URL
-    params = {
-        "response_type": "code",
-        "client_id": settings.LINKEDIN_CLIENT_ID,
-        "redirect_uri": settings.LINKEDIN_REDIRECT_URI,
-        "scope": "r_liteprofile r_emailaddress",
-        "state": state,
-    }
-
-    auth_url = (
-        "https://www.linkedin.com/oauth/v2/authorization?"
-        + urllib.parse.urlencode(params)
-    )
-    return {"url": auth_url, "state": state}
-
-
-@router.get("/tiktok/url")
-async def get_tiktok_oauth_url(db: Session = Depends(get_db)):
-    """Generate TikTok OAuth authorization URL"""
-
-    # Generate secure state parameter
-    state = secrets.token_urlsafe(32)
-
-    # Store state in database for verification
-    oauth_state = OAuthState(
-        state=state,
-        provider="tiktok",
-        created_at=datetime.utcnow(),
-        expires_at=datetime.utcnow() + timedelta(minutes=10),
-    )
-    db.add(oauth_state)
-    db.commit()  # Fixed: removed await
-
-    # Build authorization URL
-    params = {
-        "client_key": settings.TIKTOK_CLIENT_KEY,
-        "scope": "user.info.basic",
-        "response_type": "code",
-        "redirect_uri": settings.TIKTOK_REDIRECT_URI,
-        "state": state,
-    }
-
-    auth_url = "https://www.tiktok.com/auth/authorize/?" + urllib.parse.urlencode(
-        params
-    )
-    return {"url": auth_url, "state": state}
-
-
-# Simplified callback endpoints for testing
-@router.get("/google/callback")
-async def google_oauth_callback(code: str = Query(...), state: str = Query(...)):
-    """Handle Google OAuth callback"""
-    return {"message": "Google OAuth callback received", "code": code, "state": state}
-
-
-@router.get("/linkedin/callback")
-async def linkedin_oauth_callback(code: str = Query(...), state: str = Query(...)):
-    """Handle LinkedIn OAuth callback"""
-    return {"message": "LinkedIn OAuth callback received", "code": code, "state": state}
-
-
-@router.get("/tiktok/callback")
-async def tiktok_oauth_callback(code: str = Query(...), state: str = Query(...)):
-    """Handle TikTok OAuth callback"""
-    return {"message": "TikTok OAuth callback received", "code": code, "state": state}
-
-
-@router.get("/accounts")
-async def get_oauth_accounts(current_user: dict = Depends(get_current_user)):
-    """Get connected OAuth accounts"""
-    return {"oauth_accounts": []}
-
-
-@router.delete("/accounts/{provider}")
-async def disconnect_oauth_account(
-    provider: str, current_user: dict = Depends(get_current_user)
+@router.post("/login", response_model=LoginResponse)
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
 ):
-    """Disconnect OAuth account"""
-    return {"message": f"{provider} account disconnected"}
+    """Login with email and password"""
+    user_service = UserService(db)
+
+    # Authenticate user (form_data.username is actually the email)
+    user = user_service.authenticate(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user"
+        )
+
+    # Update last login timestamp
+    user_service.update_last_login(user.id)
+
+    # Create access token using user ID
+    access_token = create_access_token(subject=user.id)
+
+    return LoginResponse(
+        access_token=access_token,
+        token_type="bearer",
+        expires_in=1800,  # 30 minutes
+        user=UserResponse.from_orm(user),
+    )
+
+
+@router.get("/me", response_model=UserResponse)
+async def get_current_user_info(
+    current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    """Get current user info"""
+    user_service = UserService(db)
+    user = user_service.get_by_id(current_user["id"])
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+
+    return UserResponse.from_orm(user)
+
+
+@router.post("/logout")
+async def logout():
+    """Logout endpoint"""
+    # In a more complex setup, you might invalidate the token here
+    # For now, logout is handled client-side by removing the token
+    return {"message": "Logout successful"}
