@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from sqlalchemy.sql import func
 from app.core.database import Base
+from sqlalchemy.orm import relationship
 
 
 class User(Base):
@@ -45,3 +46,8 @@ class User(Base):
         elif self.last_name:
             return self.last_name
         return self.username
+
+    # Relationships
+    oauth_accounts = relationship(
+        "OAuthAccount", back_populates="user", cascade="all, delete-orphan"
+    )
