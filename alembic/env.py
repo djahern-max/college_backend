@@ -16,7 +16,7 @@ from app.models.user import User
 
 # Import other models as you create them (commented out for now):
 # from app.models.profile import Profile
-# from app.models.oauth import OAuthAccount
+from app.models.oauth import OAuthAccount
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

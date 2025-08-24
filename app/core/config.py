@@ -8,13 +8,14 @@ load_dotenv()
 
 class Settings(BaseSettings):
     # App Settings
-    APP_NAME: str = "MagicScholar"  # Updated from CampusConnect
+    APP_NAME: str = "MagicScholar"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = True
     ENVIRONMENT: str = "development"  # development, staging, production
 
-    # Database - Updated for magicscholar
+    # Database
     DATABASE_URL: str = "postgresql://username:password@localhost:5432/magicscholar_db"
+    DB_PASSWORD: str = ""  # Added missing field
 
     # Security
     SECRET_KEY: str = "your-super-secret-key-change-this-in-production"
@@ -23,8 +24,12 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # Domain Configuration
-    DOMAIN: str = "localhost:3000"  # Will be magicscholar.com in production
-    API_DOMAIN: str = "localhost:8000"  # Will be api.magicscholar.com in production
+    DOMAIN: str = "localhost:3000"
+    API_DOMAIN: str = "localhost:8000"
+
+    # Redis
+    REDIS_URL: str = "redis://localhost:6379"
+    REDIS_PASSWORD: str = ""  # Added missing field
 
     # CORS - Dynamic based on environment
     @property
@@ -33,7 +38,6 @@ class Settings(BaseSettings):
             return [
                 "https://magicscholar.com",
                 "https://www.magicscholar.com",
-                "https://api.magicscholar.com",
             ]
         elif self.ENVIRONMENT == "staging":
             return ["https://staging.magicscholar.com", "http://localhost:3000"]
@@ -44,7 +48,7 @@ class Settings(BaseSettings):
     @property
     def FRONTEND_URL(self) -> str:
         if self.ENVIRONMENT == "production":
-            return "https://www.magicscholar.com"  # Updated to use www
+            return "https://www.magicscholar.com"
         elif self.ENVIRONMENT == "staging":
             return "https://staging.magicscholar.com"
         else:  # development
@@ -54,40 +58,41 @@ class Settings(BaseSettings):
     @property
     def API_BASE_URL(self) -> str:
         if self.ENVIRONMENT == "production":
-            return "https://api.magicscholar.com"
+            return "https://www.magicscholar.com"  # Fixed: Use www.magicscholar.com
         elif self.ENVIRONMENT == "staging":
-            return "https://api-staging.magicscholar.com"
+            return "https://staging.magicscholar.com"
         else:  # development
             return "http://localhost:8000"
 
-    # OAuth Settings - Dynamic redirect URIs
+    # OAuth Settings
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
 
+    LINKEDIN_CLIENT_ID: str = ""
+    LINKEDIN_CLIENT_SECRET: str = ""
+
+    # TikTok OAuth (note the different field name)
+    TIKTOK_CLIENT_ID: str = ""
+    TIKTOK_CLIENT_SECRET: str = ""
+    TIKTOK_CLIENT_KEY: str = ""  # Added this field that TikTok uses
+
+    # OAuth Redirect URIs - Dynamic based on environment
     @property
     def GOOGLE_REDIRECT_URI(self) -> str:
         return f"{self.API_BASE_URL}/api/v1/oauth/google/callback"
-
-    LINKEDIN_CLIENT_ID: str = ""
-    LINKEDIN_CLIENT_SECRET: str = ""
 
     @property
     def LINKEDIN_REDIRECT_URI(self) -> str:
         return f"{self.API_BASE_URL}/api/v1/oauth/linkedin/callback"
 
-    TIKTOK_CLIENT_ID: str = ""
-    TIKTOK_CLIENT_SECRET: str = ""
-
     @property
     def TIKTOK_REDIRECT_URI(self) -> str:
         return f"{self.API_BASE_URL}/api/v1/oauth/tiktok/callback"
 
-    # Redis
-    REDIS_URL: str = "redis://localhost:6379"
-
     class Config:
         case_sensitive = True
         env_file = ".env"
+        extra = "ignore"  # This will ignore extra fields in .env that aren't defined
 
 
 settings = Settings()
