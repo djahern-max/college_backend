@@ -243,12 +243,47 @@ def google_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
 
 
 @router.get("/linkedin/url")
-def get_linkedin_oauth_url():
-    """Get LinkedIn OAuth URL"""
-    return {
-        "url": "https://www.linkedin.com/oauth/v2/authorization?...",
-        "state": "test_state_456",
-    }
+def get_linkedin_oauth_url(db: Session = Depends(get_db)):
+    try:
+        # 1) Generate state
+        state = secrets.token_urlsafe(32)
+        logger.info("Generating LinkedIn OAuth state %s", state[:8])
+
+        # 2) Sanity-check config
+        logger.info("LINKEDIN_CLIENT_ID set? %s", bool(settings.LINKEDIN_CLIENT_ID))
+        logger.info("LINKEDIN_REDIRECT_URI: %s", settings.LINKEDIN_REDIRECT_URI)
+
+        # 3) Persist state
+        oauth_state = OAuthState(
+            state=state,
+            provider="linkedin",
+            created_at=datetime.utcnow(),
+            expires_at=datetime.utcnow() + timedelta(minutes=10),
+        )
+        db.add(oauth_state)
+        db.commit()
+        db.refresh(oauth_state)
+        logger.info("OAuthState committed for provider=linkedin")
+
+        # 4) Build LinkedIn OAuth URL
+        params = {
+            "client_id": settings.LINKEDIN_CLIENT_ID,
+            "redirect_uri": settings.LINKEDIN_REDIRECT_URI,
+            "response_type": "code",
+            "scope": "r_liteprofile r_emailaddress",  # LinkedIn v2 API scopes
+            "state": state,
+        }
+        auth_url = (
+            "https://www.linkedin.com/oauth/v2/authorization?"
+            + urllib.parse.urlencode(params)
+        )
+        return {"url": auth_url, "state": state}
+
+    except Exception as e:
+        logger.exception("Failed to build LinkedIn OAuth URL")
+        raise HTTPException(
+            status_code=500, detail=f"/linkedin/url failed: {type(e).__name__}: {e}"
+        )
 
 
 @router.get("/tiktok/url")
@@ -261,9 +296,199 @@ def get_tiktok_oauth_url():
 
 
 @router.get("/linkedin/callback")
-def linkedin_oauth_callback():
+def linkedin_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
     """Handle LinkedIn OAuth callback"""
-    return {"message": "LinkedIn OAuth callback working"}
+    try:
+        logger.info(
+            "LinkedIn OAuth callback received - code: %s, state: %s",
+            code[:10] + "..." if code else "None",
+            state[:8] + "..." if state else "None",
+        )
+
+        # 1) Verify state (same as Google)
+        oauth_state = (
+            db.query(OAuthState)
+            .filter(
+                OAuthState.state == state,
+                OAuthState.provider == "linkedin",
+                OAuthState.used.is_not(True),
+                OAuthState.expires_at > datetime.utcnow(),
+            )
+            .first()
+        )
+
+        if not oauth_state:
+            logger.error("LinkedIn state verification failed for: %s", state[:8])
+            error_url = f"{settings.FRONTEND_URL}/auth/error?message=invalid_state"
+            return RedirectResponse(url=error_url)
+
+        # 2) Mark state as used
+        oauth_state.used = True
+        db.commit()
+        logger.info("LinkedIn OAuth state marked as used: %s", state[:8])
+
+        # 3) Exchange code for tokens
+        token_url = "https://www.linkedin.com/oauth/v2/accessToken"
+        token_data = {
+            "client_id": settings.LINKEDIN_CLIENT_ID,
+            "client_secret": settings.LINKEDIN_CLIENT_SECRET,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": settings.LINKEDIN_REDIRECT_URI,
+        }
+
+        logger.info("Exchanging LinkedIn authorization code for access token")
+
+        with httpx.Client() as client:
+            token_response = client.post(
+                token_url,
+                data=token_data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                timeout=10.0,
+            )
+            logger.info(
+                "LinkedIn token response status: %d", token_response.status_code
+            )
+            if token_response.status_code != 200:
+                logger.error("LinkedIn token response error: %s", token_response.text)
+                token_response.raise_for_status()
+            tokens = token_response.json()
+
+        logger.info("Successfully received tokens from LinkedIn")
+
+        # 4) Get user profile from LinkedIn
+        profile_url = "https://api.linkedin.com/v2/people/~:(id,firstName,lastName,profilePicture(displayImage~:playableStreams))"
+        headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+        with httpx.Client() as client:
+            profile_response = client.get(profile_url, headers=headers, timeout=10.0)
+            profile_response.raise_for_status()
+            profile_data = profile_response.json()
+
+        # 5) Get user email (separate API call for LinkedIn)
+        email_url = "https://api.linkedin.com/v2/emailAddresses?q=members&projection=(elements*(handle~))"
+
+        with httpx.Client() as client:
+            email_response = client.get(email_url, headers=headers, timeout=10.0)
+            email_response.raise_for_status()
+            email_data = email_response.json()
+
+        # 6) Extract user information
+        user_email = email_data["elements"][0]["handle~"]["emailAddress"]
+        first_name = (
+            profile_data.get("firstName", {}).get("localized", {}).get("en_US", "")
+        )
+        last_name = (
+            profile_data.get("lastName", {}).get("localized", {}).get("en_US", "")
+        )
+
+        user_data = {
+            "id": profile_data["id"],
+            "email": user_email,
+            "given_name": first_name,
+            "family_name": last_name,
+            "name": f"{first_name} {last_name}".strip(),
+        }
+
+        logger.info(
+            "LinkedIn user data received for: %s", user_data.get("email", "unknown")
+        )
+
+        # 7) Find or create user account (same logic as Google)
+        oauth_account = (
+            db.query(OAuthAccount)
+            .filter(
+                OAuthAccount.provider == "linkedin",
+                OAuthAccount.provider_user_id == user_data["id"],
+            )
+            .first()
+        )
+
+        if oauth_account:
+            # Update existing OAuth account
+            logger.info(
+                "Updating existing LinkedIn OAuth account for user: %s",
+                oauth_account.user_id,
+            )
+            oauth_account.access_token = tokens["access_token"]
+            oauth_account.profile_data = user_data
+            oauth_account.updated_at = datetime.utcnow()
+            user = oauth_account.user
+        else:
+            # Check if user exists by email
+            user = db.query(User).filter(User.email == user_data["email"]).first()
+
+            if not user:
+                # Create new user
+                logger.info(
+                    "Creating new user account for LinkedIn user: %s",
+                    user_data.get("email"),
+                )
+                user_service = UserService(db)
+
+                # Generate username from email
+                base_username = user_data["email"].split("@")[0]
+                base_username = "".join(
+                    c if c.isalnum() or c in "_-" else "_" for c in base_username
+                )
+                if base_username and not base_username[0].isalnum():
+                    base_username = "user_" + base_username
+                if not base_username:
+                    base_username = "linkedin_user"
+
+                username = base_username
+                counter = 1
+                while user_service.is_username_taken(username):
+                    username = f"{base_username}{counter}"
+                    counter += 1
+
+                user_create = UserCreate(
+                    email=user_data["email"],
+                    username=username,
+                    first_name=user_data.get("given_name", ""),
+                    last_name=user_data.get("family_name", ""),
+                    password="oauth_user_no_password",
+                )
+                user = user_service.create_user(user_create)
+                logger.info("Created new LinkedIn user with ID: %s", user.id)
+            else:
+                logger.info(
+                    "Linking LinkedIn OAuth account to existing user: %s", user.id
+                )
+
+            # Create OAuth account link
+            oauth_account = OAuthAccount(
+                user_id=user.id,
+                provider="linkedin",
+                provider_user_id=user_data["id"],
+                email=user_data["email"],
+                access_token=tokens["access_token"],
+                profile_data=user_data,
+                created_at=datetime.utcnow(),
+            )
+            db.add(oauth_account)
+
+        db.commit()
+        logger.info("LinkedIn OAuth account setup completed for user: %s", user.id)
+
+        # 8) Create JWT token and redirect (same as Google)
+        access_token = create_access_token(subject=user.id)
+        logger.info("JWT token created for LinkedIn user: %s", user.id)
+
+        callback_url = f"{settings.FRONTEND_URL}/auth/callback?token={access_token}"
+        logger.info("Redirecting to frontend callback: %s", callback_url.split("?")[0])
+        return RedirectResponse(url=callback_url)
+
+    except httpx.RequestError as e:
+        logger.exception(
+            "HTTP request failed during LinkedIn OAuth callback: %s", str(e)
+        )
+        error_url = f"{settings.FRONTEND_URL}/auth/error?message=oauth_failed"
+        return RedirectResponse(url=error_url)
+    except Exception as e:
+        logger.exception("LinkedIn OAuth callback failed: %s", str(e))
+        error_url = f"{settings.FRONTEND_URL}/auth/error?message=oauth_failed"
+        return RedirectResponse(url=error_url)
 
 
 @router.get("/tiktok/callback")
