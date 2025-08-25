@@ -286,15 +286,6 @@ def get_linkedin_oauth_url(db: Session = Depends(get_db)):
         )
 
 
-@router.get("/tiktok/url")
-def get_tiktok_oauth_url():
-    """Get TikTok OAuth URL"""
-    return {
-        "url": "https://www.tiktok.com/auth/authorize?...",
-        "state": "test_state_789",
-    }
-
-
 @router.get("/linkedin/callback")
 def linkedin_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
     """Handle LinkedIn OAuth callback"""
@@ -487,21 +478,248 @@ def linkedin_oauth_callback(code: str, state: str, db: Session = Depends(get_db)
         return RedirectResponse(url=error_url)
 
 
+@router.get("/tiktok/url")
+def get_tiktok_oauth_url(db: Session = Depends(get_db)):
+    """Get TikTok OAuth URL"""
+    try:
+        # 1) Generate state
+        state = secrets.token_urlsafe(32)
+        logger.info("Generating TikTok OAuth state %s", state[:8])
+
+        # 2) Sanity-check config
+        logger.info("TIKTOK_CLIENT_ID set? %s", bool(settings.TIKTOK_CLIENT_ID))
+        logger.info("TIKTOK_REDIRECT_URI: %s", settings.TIKTOK_REDIRECT_URI)
+
+        # 3) Persist state
+        oauth_state = OAuthState(
+            state=state,
+            provider="tiktok",
+            created_at=datetime.utcnow(),
+            expires_at=datetime.utcnow() + timedelta(minutes=10),
+        )
+        db.add(oauth_state)
+        db.commit()
+        db.refresh(oauth_state)
+        logger.info("OAuthState committed for provider=tiktok")
+
+        # 4) Build TikTok OAuth URL
+        params = {
+            "client_key": settings.TIKTOK_CLIENT_ID,  # Note: TikTok uses client_key
+            "redirect_uri": settings.TIKTOK_REDIRECT_URI,
+            "response_type": "code",
+            "scope": "user.info.basic",  # TikTok scope for basic user info
+            "state": state,
+        }
+        auth_url = "https://www.tiktok.com/v2/auth/authorize?" + urllib.parse.urlencode(
+            params
+        )
+        return {"url": auth_url, "state": state}
+
+    except Exception as e:
+        logger.exception("Failed to build TikTok OAuth URL")
+        raise HTTPException(
+            status_code=500, detail=f"/tiktok/url failed: {type(e).__name__}: {e}"
+        )
+
+
 @router.get("/tiktok/callback")
-def tiktok_oauth_callback():
+def tiktok_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
     """Handle TikTok OAuth callback"""
-    return {"message": "TikTok OAuth callback working"}
+    try:
+        logger.info(
+            "TikTok OAuth callback received - code: %s, state: %s",
+            code[:10] + "..." if code else "None",
+            state[:8] + "..." if state else "None",
+        )
 
+        # 1) Verify state
+        oauth_state = (
+            db.query(OAuthState)
+            .filter(
+                OAuthState.state == state,
+                OAuthState.provider == "tiktok",
+                OAuthState.used.is_not(True),
+                OAuthState.expires_at > datetime.utcnow(),
+            )
+            .first()
+        )
 
-@router.get("/accounts")
-def get_oauth_accounts(current_user: dict = Depends(get_current_user)):
-    """Get connected OAuth accounts"""
-    return {"oauth_accounts": []}
+        if not oauth_state:
+            logger.error("TikTok state verification failed for: %s", state[:8])
+            error_url = f"{settings.FRONTEND_URL}/auth/error?message=invalid_state"
+            return RedirectResponse(url=error_url)
 
+        # 2) Mark state as used
+        oauth_state.used = True
+        db.commit()
+        logger.info("TikTok OAuth state marked as used: %s", state[:8])
 
-@router.delete("/accounts/{provider}")
-def disconnect_oauth_account(
-    provider: str, current_user: dict = Depends(get_current_user)
-):
-    """Disconnect OAuth account"""
-    return {"message": f"{provider} account disconnected"}
+        # 3) Exchange code for tokens
+        token_url = "https://open.tiktokapis.com/v2/oauth/token/"
+        token_data = {
+            "client_key": settings.TIKTOK_CLIENT_ID,
+            "client_secret": settings.TIKTOK_CLIENT_SECRET,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": settings.TIKTOK_REDIRECT_URI,
+        }
+
+        logger.info("Exchanging TikTok authorization code for access token")
+
+        with httpx.Client() as client:
+            token_response = client.post(
+                token_url,
+                data=token_data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                timeout=10.0,
+            )
+            logger.info("TikTok token response status: %d", token_response.status_code)
+            if token_response.status_code != 200:
+                logger.error("TikTok token response error: %s", token_response.text)
+                token_response.raise_for_status()
+            tokens = token_response.json()
+
+        logger.info("Successfully received tokens from TikTok")
+
+        # 4) Get user profile from TikTok
+        profile_url = "https://open.tiktokapis.com/v2/user/info/"
+        headers = {
+            "Authorization": f"Bearer {tokens['access_token']}",
+            "Content-Type": "application/json",
+        }
+
+        # TikTok requires POST with JSON body specifying fields
+        request_body = {"fields": ["open_id", "union_id", "avatar_url", "display_name"]}
+
+        with httpx.Client() as client:
+            profile_response = client.post(
+                profile_url, headers=headers, json=request_body, timeout=10.0
+            )
+            profile_response.raise_for_status()
+            profile_data = profile_response.json()
+
+        # TikTok API response format:
+        # {
+        #   "data": {
+        #     "user": {
+        #       "open_id": "user_id",
+        #       "union_id": "union_id",
+        #       "avatar_url": "profile_pic",
+        #       "display_name": "Username"
+        #     }
+        #   }
+        # }
+
+        user_info = profile_data["data"]["user"]
+
+        # Map TikTok format to our expected format
+        # NOTE: TikTok doesn't provide email, so we'll need to handle that
+        user_data = {
+            "id": user_info["open_id"],
+            "email": None,  # TikTok doesn't provide email!
+            "given_name": user_info.get("display_name", ""),
+            "family_name": "",  # TikTok doesn't provide separate names
+            "name": user_info.get("display_name", "TikTok User"),
+            "avatar_url": user_info.get("avatar_url", ""),
+        }
+
+        logger.info(
+            "TikTok user data received for: %s", user_data.get("name", "unknown")
+        )
+
+        # 5) Handle user creation - SPECIAL CASE for no email
+        oauth_account = (
+            db.query(OAuthAccount)
+            .filter(
+                OAuthAccount.provider == "tiktok",
+                OAuthAccount.provider_user_id == user_data["id"],
+            )
+            .first()
+        )
+
+        if oauth_account:
+            # Update existing OAuth account
+            logger.info(
+                "Updating existing TikTok OAuth account for user: %s",
+                oauth_account.user_id,
+            )
+            oauth_account.access_token = tokens["access_token"]
+            oauth_account.profile_data = user_data
+            oauth_account.updated_at = datetime.utcnow()
+            user = oauth_account.user
+        else:
+            # For TikTok, we can't link by email since there is none
+            # We'll need to create a new user account OR prompt for email
+
+            # Option 1: Create user with generated email
+            generated_email = f"tiktok_{user_data['id']}@magicscholar.com"
+
+            # Check if this generated email already exists
+            existing_user = db.query(User).filter(User.email == generated_email).first()
+
+            if not existing_user:
+                # Create new user
+                logger.info(
+                    "Creating new user account for TikTok user: %s",
+                    user_data.get("name"),
+                )
+                user_service = UserService(db)
+
+                # Generate username from display name
+                base_username = user_data.get("name", "tiktok_user").lower()
+                base_username = "".join(
+                    c if c.isalnum() or c in "_-" else "_" for c in base_username
+                )
+                if not base_username or not base_username[0].isalnum():
+                    base_username = "tiktok_user"
+
+                username = base_username
+                counter = 1
+                while user_service.is_username_taken(username):
+                    username = f"{base_username}{counter}"
+                    counter += 1
+
+                user_create = UserCreate(
+                    email=generated_email,  # Generated email
+                    username=username,
+                    first_name=user_data.get("given_name", ""),
+                    last_name=user_data.get("family_name", ""),
+                    password="oauth_user_no_password",
+                )
+                user = user_service.create_user(user_create)
+                logger.info("Created new TikTok user with ID: %s", user.id)
+            else:
+                user = existing_user
+                logger.info("Using existing user for TikTok OAuth: %s", user.id)
+
+            # Create OAuth account link
+            oauth_account = OAuthAccount(
+                user_id=user.id,
+                provider="tiktok",
+                provider_user_id=user_data["id"],
+                email=generated_email,
+                access_token=tokens["access_token"],
+                profile_data=user_data,
+                created_at=datetime.utcnow(),
+            )
+            db.add(oauth_account)
+
+        db.commit()
+        logger.info("TikTok OAuth account setup completed for user: %s", user.id)
+
+        # 6) Create JWT token and redirect
+        access_token = create_access_token(subject=user.id)
+        logger.info("JWT token created for TikTok user: %s", user.id)
+
+        callback_url = f"{settings.FRONTEND_URL}/auth/callback?token={access_token}"
+        logger.info("Redirecting to frontend callback: %s", callback_url.split("?")[0])
+        return RedirectResponse(url=callback_url)
+
+    except httpx.RequestError as e:
+        logger.exception("HTTP request failed during TikTok OAuth callback: %s", str(e))
+        error_url = f"{settings.FRONTEND_URL}/auth/error?message=oauth_failed"
+        return RedirectResponse(url=error_url)
+    except Exception as e:
+        logger.exception("TikTok OAuth callback failed: %s", str(e))
+        error_url = f"{settings.FRONTEND_URL}/auth/error?message=oauth_failed"
+        return RedirectResponse(url=error_url)

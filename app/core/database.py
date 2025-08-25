@@ -35,10 +35,8 @@ def create_tables():
     """Create all database tables"""
     # Import models to register them with SQLAlchemy
     from app.models.user import User  # noqa
-
-    # Add other model imports as needed:
-    # from app.models.profile import UserProfile  # noqa
-    # from app.models.oauth import OAuthAccount  # noqa
+    from app.models.profile import UserProfile  # noqa - ADD THIS LINE
+    from app.models.oauth import OAuthAccount  # noqa
 
     Base.metadata.create_all(bind=engine)
 

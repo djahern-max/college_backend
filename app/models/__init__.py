@@ -1,14 +1,22 @@
+# app/models/__init__.py
 """
-Database models for CampusConnect.
+SQLAlchemy models for CampusConnect.
 
-This module contains all SQLAlchemy models that define our database structure:
-- User: Authentication and basic user information
-- UserProfile: Comprehensive student profiles for scholarship matching
-- OAuthAccount: OAuth provider integration (Google, LinkedIn, TikTok)
-- OAuthState: OAuth security state management
+Import all models here to ensure they are registered with SQLAlchemy
+when the application starts.
 """
 
 from .user import User
+from .profile import UserProfile
+from .oauth import OAuthAccount
 
-# Export all models for easy importing
-__all__ = ["User", "UserProfile", "OAuthAccount", "OAuthState"]
+# Import other models as they're created:
+# from .scholarship import Scholarship, ScholarshipMatch
+# from .review import Review
+
+__all__ = [
+    "User",
+    "UserProfile",
+    "OAuthAccount",
+    # Add other models as they're created
+]

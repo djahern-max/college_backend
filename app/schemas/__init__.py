@@ -1,3 +1,4 @@
+# app/schemas/__init__.py
 """
 Pydantic schemas for CampusConnect API.
 
@@ -9,6 +10,7 @@ These schemas define the structure of data that flows between the frontend and b
 Schema categories:
 - auth: Authentication and authorization
 - user: User management and profiles
+- profile: User profile management
 """
 
 from .auth import (
@@ -23,15 +25,16 @@ from .auth import (
 
 from .user import UserBase, UserCreate, UserUpdate, UserResponse, UserInDB
 
-# Import profile schemas when available:
-# from .profile import (
-#     ProfileBase,
-#     ProfileCreate,
-#     ProfileUpdate,
-#     ProfileResponse,
-#     ProfileSummary,
-#     ProfileFieldUpdate
-# )
+from .profile import (
+    ProfileBase,
+    ProfileCreate,
+    ProfileUpdate,
+    ProfileResponse,
+    ProfileSummary,
+    ProfileFieldUpdate,
+    ProfileSection,
+    ProfileCompletionStatus,
+)
 
 # Export all schemas
 __all__ = [
@@ -49,11 +52,13 @@ __all__ = [
     "UserUpdate",
     "UserResponse",
     "UserInDB",
-    # Profile schemas (when available)
-    # "ProfileBase",
-    # "ProfileCreate",
-    # "ProfileUpdate",
-    # "ProfileResponse",
-    # "ProfileSummary",
-    # "ProfileFieldUpdate"
+    # Profile schemas
+    "ProfileBase",
+    "ProfileCreate",
+    "ProfileUpdate",
+    "ProfileResponse",
+    "ProfileSummary",
+    "ProfileFieldUpdate",
+    "ProfileSection",
+    "ProfileCompletionStatus",
 ]
