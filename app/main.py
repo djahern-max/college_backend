@@ -26,7 +26,7 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])
 app.include_router(profiles.router, prefix="/api/v1/profiles", tags=["Profiles"])
 app.include_router(
-    scholarship.router, prefix="/api/v1/scholarships", tags=["Scholarships"]
+    scholarship.router, prefix="/api/v1/scholarship", tags=["Scholarships"]
 )
 app.include_router(oauth.router, prefix="/api/v1/oauth", tags=["OAuth"])
 
