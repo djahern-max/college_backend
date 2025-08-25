@@ -270,7 +270,7 @@ def get_linkedin_oauth_url(db: Session = Depends(get_db)):
             "client_id": settings.LINKEDIN_CLIENT_ID,
             "redirect_uri": settings.LINKEDIN_REDIRECT_URI,
             "response_type": "code",
-            "scope": "profile email",  # LinkedIn v2 API scopes
+            "scope": "openid profile email",  # LinkedIn v2 API scopes
             "state": state,
         }
         auth_url = (
@@ -357,7 +357,7 @@ def linkedin_oauth_callback(code: str, state: str, db: Session = Depends(get_db)
         logger.info("Successfully received tokens from LinkedIn")
 
         # 4) Get user profile from LinkedIn
-        profile_url = "https://api.linkedin.com/v2/people/~"
+        profile_url = "https://api.linkedin.com/v2/userinfo"
         headers = {"Authorization": f"Bearer {tokens['access_token']}"}
 
         with httpx.Client() as client:
