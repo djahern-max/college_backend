@@ -356,38 +356,34 @@ def linkedin_oauth_callback(code: str, state: str, db: Session = Depends(get_db)
 
         logger.info("Successfully received tokens from LinkedIn")
 
-        # 4) Get user profile from LinkedIn
+        # 4) Get user profile from LinkedIn using OpenID Connect userinfo endpoint
         profile_url = "https://api.linkedin.com/v2/userinfo"
         headers = {"Authorization": f"Bearer {tokens['access_token']}"}
 
         with httpx.Client() as client:
             profile_response = client.get(profile_url, headers=headers, timeout=10.0)
             profile_response.raise_for_status()
-            profile_data = profile_response.json()
+            userinfo_data = profile_response.json()
 
-        # 5) Get user email (separate API call for LinkedIn)
-        email_url = "https://api.linkedin.com/v2/emailAddresses?q=members&projection=(elements*(handle~))"
+        # OpenID Connect userinfo response format:
+        # {
+        #   "sub": "user_id",
+        #   "name": "Full Name",
+        #   "given_name": "First",
+        #   "family_name": "Last",
+        #   "email": "user@example.com"
+        # }
 
-        with httpx.Client() as client:
-            email_response = client.get(email_url, headers=headers, timeout=10.0)
-            email_response.raise_for_status()
-            email_data = email_response.json()
-
-        # 6) Extract user information
-        user_email = email_data["elements"][0]["handle~"]["emailAddress"]
-        first_name = (
-            profile_data.get("firstName", {}).get("localized", {}).get("en_US", "")
-        )
-        last_name = (
-            profile_data.get("lastName", {}).get("localized", {}).get("en_US", "")
-        )
-
+        # Map OpenID Connect format to our expected format
         user_data = {
-            "id": profile_data["id"],
-            "email": user_email,
-            "given_name": first_name,
-            "family_name": last_name,
-            "name": f"{first_name} {last_name}".strip(),
+            "id": userinfo_data["sub"],
+            "email": userinfo_data["email"],
+            "given_name": userinfo_data.get("given_name", ""),
+            "family_name": userinfo_data.get("family_name", ""),
+            "name": userinfo_data.get(
+                "name",
+                f"{userinfo_data.get('given_name', '')} {userinfo_data.get('family_name', '')}",
+            ).strip(),
         }
 
         logger.info(
