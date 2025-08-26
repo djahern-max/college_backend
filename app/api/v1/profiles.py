@@ -35,6 +35,20 @@ async def get_my_profile(
     return ProfileResponse.from_attributes(profile)
 
 
+@router.get("/me/debug")
+async def debug_profile(
+    current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    profile_service = ProfileService(db)
+    profile = profile_service.get_profile_by_user_id(current_user["id"])
+
+    return {
+        "work_experience_raw": profile.work_experience,
+        "work_experience_type": str(type(profile.work_experience)),
+        "profile_id": profile.id,
+    }
+
+
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=ProfileResponse)
 async def create_profile(
     profile_data: ProfileCreate,

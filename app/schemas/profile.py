@@ -27,7 +27,7 @@ class ProfileBase(BaseModel):
     extracurricular_activities: Optional[List[str]] = None
     volunteer_experience: Optional[List[str]] = None
     volunteer_hours: Optional[int] = Field(None, ge=0)
-    work_experience: Optional[List[Dict[str, Any]]] = None
+    work_experience: Optional[Any] = None
 
     # Background & Demographics
     ethnicity: Optional[List[str]] = None
