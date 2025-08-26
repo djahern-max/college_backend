@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.api.v1 import auth, users, oauth, profiles, scholarship
+from app.api.v1 import auth, oauth, profiles, scholarship
 from fastapi.routing import APIRoute
 from fastapi.responses import PlainTextResponse
 
@@ -23,7 +23,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
-app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])
+
 app.include_router(profiles.router, prefix="/api/v1/profiles", tags=["Profiles"])
 app.include_router(
     scholarship.router, prefix="/api/v1/scholarship", tags=["Scholarships"]
