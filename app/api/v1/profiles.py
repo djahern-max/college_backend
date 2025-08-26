@@ -35,17 +35,24 @@ async def get_my_profile(
     return ProfileResponse.from_attributes(profile)
 
 
-@router.get("/me/debug")
-async def debug_profile(
+@router.get("/me/debug2")
+async def debug_profile_fields(
     current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     profile_service = ProfileService(db)
     profile = profile_service.get_profile_by_user_id(current_user["id"])
 
     return {
-        "work_experience_raw": profile.work_experience,
-        "work_experience_type": str(type(profile.work_experience)),
-        "profile_id": profile.id,
+        "academic_interests": profile.academic_interests,
+        "academic_interests_type": str(type(profile.academic_interests)),
+        "career_goals": profile.career_goals,
+        "career_goals_type": str(type(profile.career_goals)),
+        "extracurricular_activities": profile.extracurricular_activities,
+        "volunteer_experience": profile.volunteer_experience,
+        "ethnicity": profile.ethnicity,
+        "scholarship_types_interested": profile.scholarship_types_interested,
+        "languages_spoken": profile.languages_spoken,
+        "special_talents": profile.special_talents,
     }
 
 
