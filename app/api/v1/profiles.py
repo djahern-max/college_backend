@@ -19,37 +19,35 @@ from app.schemas.profile import (
 router = APIRouter()
 
 
-@router.get("/me", response_model=ProfileResponse)
-async def get_my_profile(
+@router.get("/me")
+async def manual_profile(
     current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     profile_service = ProfileService(db)
     profile = profile_service.get_profile_by_user_id(current_user["id"])
 
-    if not profile:
-        raise HTTPException(status_code=404, detail="Profile not found")
-
-    return ProfileResponse.from_orm(profile)
-
-
-@router.get("/me/debug2")
-async def debug_profile_fields(
-    current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)
-):
-    profile_service = ProfileService(db)
-    profile = profile_service.get_profile_by_user_id(current_user["id"])
-
+    # Manually construct the response instead of using from_attributes
     return {
+        "id": profile.id,
+        "user_id": profile.user_id,
+        "high_school_name": profile.high_school_name,
+        "graduation_year": profile.graduation_year,
+        "gpa": profile.gpa,
+        "sat_score": profile.sat_score,
+        "act_score": profile.act_score,
+        "intended_major": profile.intended_major,
         "academic_interests": profile.academic_interests,
-        "academic_interests_type": str(type(profile.academic_interests)),
         "career_goals": profile.career_goals,
-        "career_goals_type": str(type(profile.career_goals)),
         "extracurricular_activities": profile.extracurricular_activities,
         "volunteer_experience": profile.volunteer_experience,
-        "ethnicity": profile.ethnicity,
-        "scholarship_types_interested": profile.scholarship_types_interested,
-        "languages_spoken": profile.languages_spoken,
-        "special_talents": profile.special_talents,
+        "volunteer_hours": profile.volunteer_hours,
+        "work_experience": profile.work_experience,
+        "profile_completed": profile.profile_completed,
+        "completion_percentage": profile.completion_percentage,
+        "created_at": profile.created_at,
+        "updated_at": profile.updated_at,
+        "completed_at": profile.completed_at,
+        # Add other fields as needed
     }
 
 
