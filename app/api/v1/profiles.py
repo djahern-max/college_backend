@@ -26,10 +26,15 @@ async def manual_profile(
     profile_service = ProfileService(db)
     profile = profile_service.get_profile_by_user_id(current_user["id"])
 
-    # Manually construct the response instead of using from_attributes
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    # Manually construct the response with all database fields
     return {
         "id": profile.id,
         "user_id": profile.user_id,
+        "date_of_birth": profile.date_of_birth,
+        "phone_number": profile.phone_number,
         "high_school_name": profile.high_school_name,
         "graduation_year": profile.graduation_year,
         "gpa": profile.gpa,
@@ -42,12 +47,28 @@ async def manual_profile(
         "volunteer_experience": profile.volunteer_experience,
         "volunteer_hours": profile.volunteer_hours,
         "work_experience": profile.work_experience,
+        "ethnicity": profile.ethnicity,
+        "first_generation_college": profile.first_generation_college,
+        "household_income_range": profile.household_income_range,
+        "state": profile.state,
+        "city": profile.city,
+        "zip_code": profile.zip_code,
+        "preferred_college_size": profile.preferred_college_size,
+        "preferred_college_location": profile.preferred_college_location,
+        "college_application_status": profile.college_application_status,
+        "personal_statement": profile.personal_statement,
+        "leadership_experience": profile.leadership_experience,
+        "challenges_overcome": profile.challenges_overcome,
+        "scholarship_types_interested": profile.scholarship_types_interested,
+        "application_deadline_preference": profile.application_deadline_preference,
+        "languages_spoken": profile.languages_spoken,
+        "special_talents": profile.special_talents,
+        "additional_info": profile.additional_info,
         "profile_completed": profile.profile_completed,
         "completion_percentage": profile.completion_percentage,
         "created_at": profile.created_at,
         "updated_at": profile.updated_at,
         "completed_at": profile.completed_at,
-        # Add other fields as needed
     }
 
 
