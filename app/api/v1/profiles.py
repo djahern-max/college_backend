@@ -23,16 +23,13 @@ router = APIRouter()
 async def get_my_profile(
     current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    """Get current user's profile"""
     profile_service = ProfileService(db)
     profile = profile_service.get_profile_by_user_id(current_user["id"])
 
     if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found"
-        )
+        raise HTTPException(status_code=404, detail="Profile not found")
 
-    return ProfileResponse.from_attributes(profile)
+    return ProfileResponse.from_orm(profile)
 
 
 @router.get("/me/debug2")
