@@ -58,33 +58,33 @@ class ProfileBase(BaseModel):
     special_talents: Optional[List[str]] = None
     additional_info: Optional[str] = None
 
-    @validator("date_of_birth")
-    def validate_date_of_birth(cls, v):
-        if v:
-            try:
-                datetime.strptime(v, "%Y-%m-%d")
-            except ValueError:
-                raise ValueError("Date of birth must be in YYYY-MM-DD format")
-        return v
+    # @validator("date_of_birth")
+    # def validate_date_of_birth(cls, v):
+    #     if v:
+    #         try:
+    #             datetime.strptime(v, "%Y-%m-%d")
+    #         except ValueError:
+    #             raise ValueError("Date of birth must be in YYYY-MM-DD format")
+    #     return v
 
-    @validator("graduation_year")
-    def validate_graduation_year(cls, v):
-        if v:
-            current_year = datetime.now().year
-            if v < current_year or v > current_year + 10:
-                raise ValueError(
-                    "Graduation year must be between current year and 10 years from now"
-                )
-        return v
+    # @validator("graduation_year")
+    # def validate_graduation_year(cls, v):
+    #     if v:
+    #         current_year = datetime.now().year
+    #         if v < current_year or v > current_year + 10:
+    #             raise ValueError(
+    #                 "Graduation year must be between current year and 10 years from now"
+    #             )
+    #     return v
 
-    @validator("phone_number")
-    def validate_phone_number(cls, v):
-        if v:
-            # Remove all non-digit characters for validation
-            digits_only = "".join(filter(str.isdigit, v))
-            if len(digits_only) < 10 or len(digits_only) > 15:
-                raise ValueError("Phone number must contain 10-15 digits")
-        return v
+    # @validator("phone_number")
+    # def validate_phone_number(cls, v):
+    #     if v:
+    #         # Remove all non-digit characters for validation
+    #         digits_only = "".join(filter(str.isdigit, v))
+    #         if len(digits_only) < 10 or len(digits_only) > 15:
+    #             raise ValueError("Phone number must contain 10-15 digits")
+    #     return v
 
 
 class ProfileCreate(ProfileBase):
