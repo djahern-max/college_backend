@@ -45,10 +45,10 @@ class UserCreate(UserBase):
     class Config:
         json_schema_extra = {
             "example": {
-                "email": "test@gmail.com",
-                "username": "TestUser",
-                "first_name": "Test",
-                "last_name": "User",
+                "email": "claire@gmail.com",
+                "username": "CAhern",
+                "first_name": "Claire",
+                "last_name": "Ahern",
                 "password": "123456",
             }
         }
