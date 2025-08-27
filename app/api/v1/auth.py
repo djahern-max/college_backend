@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import create_access_token
 from app.services.user import UserService
-from app.schemas.auth import LoginResponse
+from app.schemas.auth import LoginResponse, LoginRequest
 from app.schemas.user import UserResponse, UserCreate
 from app.api.deps import get_current_user
 
@@ -36,13 +36,14 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=LoginResponse)
 async def login_for_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
+    login_data: LoginRequest,  # Use your custom schema instead
+    db: Session = Depends(get_db),
 ):
     """Login with email and password"""
     user_service = UserService(db)
 
-    # Authenticate user (form_data.username is actually the email)
-    user = user_service.authenticate(form_data.username, form_data.password)
+    # Now it's clear - using email
+    user = user_service.authenticate(login_data.email, login_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
