@@ -112,9 +112,3 @@ class UserInDB(UserBase):
 
     class Config:
         from_attributes = True
-
-
-# Now resolve the forward reference in auth.py
-from app.schemas.auth import LoginResponse
-
-LoginResponse.model_rebuild()

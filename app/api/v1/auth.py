@@ -31,7 +31,7 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
 
     # Create the user
     user = user_service.create_user(user_data)
-    return UserResponse.from_orm(user)
+    return UserResponse.model_validate(user)
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -65,8 +65,8 @@ async def login_for_access_token(
     return LoginResponse(
         access_token=access_token,
         token_type="bearer",
-        expires_in=1800,  # 30 minutes
-        user=UserResponse.from_orm(user),
+        expires_in=1800,
+        user=UserResponse.model_validate(user).model_dump(),
     )
 
 
@@ -83,7 +83,7 @@ async def get_current_user_info(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
 
-    return UserResponse.from_orm(user)
+    return UserResponse.model_validate(user)
 
 
 @router.post("/logout")

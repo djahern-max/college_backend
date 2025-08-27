@@ -1,7 +1,9 @@
 from __future__ import annotations
 from pydantic import BaseModel, EmailStr
 from typing import Optional
-from app.schemas.user import UserResponse
+
+# Remove this import - it causes the circular dependency
+# from app.schemas.user import UserResponse
 
 
 class LoginRequest(BaseModel):
@@ -22,7 +24,7 @@ class LoginResponse(BaseModel):
     access_token: str
     token_type: str
     expires_in: int
-    user: UserResponse  # No quotes needed with __future__ import
+    user: dict  # Change this to dict instead of UserResponse
 
     class Config:
         json_schema_extra = {
