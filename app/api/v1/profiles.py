@@ -19,6 +19,27 @@ from app.schemas.profile import (
 router = APIRouter()
 
 
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=ProfileResponse)
+async def create_profile(
+    profile_data: ProfileCreate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create a new profile for the current user"""
+    profile_service = ProfileService(db)
+
+    # Check if profile already exists
+    existing_profile = profile_service.get_profile_by_user_id(current_user["id"])
+    if existing_profile:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Profile already exists. Use PATCH to update.",
+        )
+
+    profile = profile_service.create_profile(current_user["id"], profile_data)
+    return ProfileResponse.from_attributes(profile)
+
+
 @router.get("/me")
 async def manual_profile(
     current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)
@@ -70,27 +91,6 @@ async def manual_profile(
         "updated_at": profile.updated_at,
         "completed_at": profile.completed_at,
     }
-
-
-@router.post("/", status_code=status.HTTP_201_CREATED, response_model=ProfileResponse)
-async def create_profile(
-    profile_data: ProfileCreate,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Create a new profile for the current user"""
-    profile_service = ProfileService(db)
-
-    # Check if profile already exists
-    existing_profile = profile_service.get_profile_by_user_id(current_user["id"])
-    if existing_profile:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Profile already exists. Use PATCH to update.",
-        )
-
-    profile = profile_service.create_profile(current_user["id"], profile_data)
-    return ProfileResponse.from_attributes(profile)
 
 
 @router.patch("/update", response_model=ProfileResponse)
