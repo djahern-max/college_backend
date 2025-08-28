@@ -1,115 +1,155 @@
 # app/services/profile.py
-from typing import Optional, Any
+from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from datetime import datetime
+import logging
 
 from app.models.profile import UserProfile
-from app.schemas.profile import ProfileCreate, ProfileUpdate, ProfileSummary
+from app.schemas.profile import ProfileCreate, ProfileUpdate
+
+logger = logging.getLogger(__name__)
 
 
 class ProfileService:
-    """Rebuilt profile service with proper create/update patterns"""
+    """Service class for profile CRUD operations with better error handling"""
 
     def __init__(self, db: Session):
         self.db = db
 
     def get_profile_by_user_id(self, user_id: int) -> Optional[UserProfile]:
-        """Get user profile by user ID"""
-        return self.db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+        """READ - Get user profile by user ID"""
+        try:
+            return (
+                self.db.query(UserProfile)
+                .filter(UserProfile.user_id == user_id)
+                .first()
+            )
+        except SQLAlchemyError as e:
+            logger.error(f"Database error getting profile for user {user_id}: {str(e)}")
+            raise Exception(f"Database error: {str(e)}")
 
-    def get_or_create_profile(self, user_id: int) -> UserProfile:
-        """Get existing profile or create empty one if doesn't exist"""
-        profile = self.get_profile_by_user_id(user_id)
-        if not profile:
-            # Create minimal empty profile
-            profile = UserProfile(user_id=user_id)
-            profile.update_completion_status()
-            self.db.add(profile)
+    def create_profile(self, user_id: int, profile_data: ProfileCreate) -> UserProfile:
+        """CREATE - Create a new user profile"""
+        try:
+            # Convert ProfileCreate to dict and remove None values for cleaner creation
+            profile_dict = profile_data.model_dump(exclude_unset=True)
+
+            # Create new profile with user_id
+            db_profile = UserProfile(user_id=user_id, **profile_dict)
+
+            # Calculate completion status using the model's built-in method
+            db_profile.update_completion_status()
+
+            # Save to database
+            self.db.add(db_profile)
             self.db.commit()
-            self.db.refresh(profile)
-        return profile
+            self.db.refresh(db_profile)
 
-    def upsert_profile(self, user_id: int, profile_data: ProfileCreate) -> UserProfile:
-        """Create new profile or completely replace existing one"""
-        # Get or create profile
-        profile = self.get_or_create_profile(user_id)
+            logger.info(f"Successfully created profile for user {user_id}")
+            return db_profile
 
-        # Update all provided fields
-        profile_dict = profile_data.model_dump(exclude_unset=True)
-        for field, value in profile_dict.items():
-            if hasattr(profile, field):
-                setattr(profile, field, value)
+        except IntegrityError as e:
+            self.db.rollback()
+            logger.error(
+                f"Integrity error creating profile for user {user_id}: {str(e)}"
+            )
+            if "unique constraint" in str(e).lower():
+                raise Exception("Profile already exists for this user")
+            raise Exception(f"Database constraint error: {str(e)}")
+        except SQLAlchemyError as e:
+            self.db.rollback()
+            logger.error(
+                f"Database error creating profile for user {user_id}: {str(e)}"
+            )
+            raise Exception(f"Database error: {str(e)}")
+        except Exception as e:
+            self.db.rollback()
+            logger.error(
+                f"Unexpected error creating profile for user {user_id}: {str(e)}"
+            )
+            raise Exception(f"Unexpected error: {str(e)}")
 
-        # Update metadata
-        profile.update_completion_status()
-        profile.updated_at = func.now()
-
-        self.db.commit()
-        self.db.refresh(profile)
-        return profile
-
-    def update_profile_fields(
+    def update_profile(
         self, user_id: int, profile_data: ProfileUpdate
-    ) -> UserProfile:
-        """Update only provided fields (partial update)"""
-        # Get or create profile
-        profile = self.get_or_create_profile(user_id)
+    ) -> Optional[UserProfile]:
+        """UPDATE - Update existing user profile"""
+        try:
+            # Get existing profile
+            db_profile = self.get_profile_by_user_id(user_id)
+            if not db_profile:
+                return None
 
-        # Update only provided fields
-        update_data = profile_data.model_dump(exclude_unset=True)
-        for field, value in update_data.items():
-            if hasattr(profile, field):
-                setattr(profile, field, value)
+            # Get update data, excluding unset fields (partial updates)
+            update_data = profile_data.model_dump(exclude_unset=True)
 
-        # Update metadata
-        profile.update_completion_status()
-        profile.updated_at = func.now()
+            # Update each field that was provided
+            for field, value in update_data.items():
+                if hasattr(db_profile, field):
+                    setattr(db_profile, field, value)
 
-        self.db.commit()
-        self.db.refresh(profile)
-        return profile
+            # Update completion status and timestamp
+            db_profile.update_completion_status()
+            db_profile.updated_at = func.now()
 
-    def update_single_field(
-        self, user_id: int, field_name: str, field_value: Any
-    ) -> UserProfile:
-        """Update a single field (for auto-save)"""
-        # Get or create profile
-        profile = self.get_or_create_profile(user_id)
+            # Save changes
+            self.db.commit()
+            self.db.refresh(db_profile)
 
-        # Validate field exists
-        if not hasattr(profile, field_name):
-            raise ValueError(f"Invalid field name: {field_name}")
+            logger.info(f"Successfully updated profile for user {user_id}")
+            return db_profile
 
-        # Update the field
-        setattr(profile, field_name, field_value)
-
-        # Update metadata
-        profile.update_completion_status()
-        profile.updated_at = func.now()
-
-        self.db.commit()
-        self.db.refresh(profile)
-        return profile
+        except SQLAlchemyError as e:
+            self.db.rollback()
+            logger.error(
+                f"Database error updating profile for user {user_id}: {str(e)}"
+            )
+            raise Exception(f"Database error: {str(e)}")
+        except Exception as e:
+            self.db.rollback()
+            logger.error(
+                f"Unexpected error updating profile for user {user_id}: {str(e)}"
+            )
+            raise Exception(f"Unexpected error: {str(e)}")
 
     def delete_profile(self, user_id: int) -> bool:
-        """Delete user profile"""
-        profile = self.get_profile_by_user_id(user_id)
-        if not profile:
-            return False
+        """DELETE - Delete user profile"""
+        try:
+            db_profile = self.get_profile_by_user_id(user_id)
+            if not db_profile:
+                return False
 
-        self.db.delete(profile)
-        self.db.commit()
-        return True
+            self.db.delete(db_profile)
+            self.db.commit()
 
-    def get_profile_summary(self, user_id: int) -> ProfileSummary:
-        """Get profile completion summary"""
-        profile = self.get_or_create_profile(user_id)
+            logger.info(f"Successfully deleted profile for user {user_id}")
+            return True
 
-        return ProfileSummary(
-            profile_completed=profile.profile_completed,
-            completion_percentage=profile.completion_percentage,
-            has_basic_info=profile.is_basic_info_complete,
-            has_academic_info=profile.is_academic_info_complete,
-            has_personal_info=profile.is_personal_info_complete,
-            missing_fields=profile.get_missing_fields(),
-        )
+        except SQLAlchemyError as e:
+            self.db.rollback()
+            logger.error(
+                f"Database error deleting profile for user {user_id}: {str(e)}"
+            )
+            raise Exception(f"Database error: {str(e)}")
+        except Exception as e:
+            self.db.rollback()
+            logger.error(
+                f"Unexpected error deleting profile for user {user_id}: {str(e)}"
+            )
+            raise Exception(f"Unexpected error: {str(e)}")
+
+    def profile_exists(self, user_id: int) -> bool:
+        """Check if user already has a profile"""
+        try:
+            return (
+                self.db.query(UserProfile)
+                .filter(UserProfile.user_id == user_id)
+                .first()
+                is not None
+            )
+        except SQLAlchemyError as e:
+            logger.error(
+                f"Database error checking profile existence for user {user_id}: {str(e)}"
+            )
+            raise Exception(f"Database error: {str(e)}")

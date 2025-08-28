@@ -4,6 +4,17 @@ from typing import Optional, List, Any
 from datetime import datetime
 
 
+class ProfileCompletionStatus(BaseModel):
+    """Schema for profile completion status by section"""
+
+    section_name: str
+    is_completed: bool
+    completion_percentage: float
+    required_fields: List[str]
+    completed_fields: List[str]
+    missing_fields: List[str]
+
+
 class ProfileBase(BaseModel):
     """Base profile schema with all available fields"""
 
@@ -121,79 +132,10 @@ class ProfileResponse(ProfileBase):
     completed_at: Optional[datetime] = None
 
     class Config:
-        from_attributes = True  # Enables conversion from SQLAlchemy models
-        json_schema_extra = {
-            "example": {
-                "id": 1,
-                "user_id": 123,
-                "high_school_name": "Exeter High School",
-                "graduation_year": 2026,
-                "gpa": 4.49,
-                "sat_score": 1450,
-                "act_score": 33,
-                "intended_major": "Fashion Marketing",
-                "academic_interests": [
-                    "Fashion Marketing",
-                    "Digital Marketing",
-                    "International Business",
-                ],
-                "extracurricular_activities": [
-                    "Varsity Volleyball",
-                    "French Honor Society",
-                    "DECA",
-                ],
-                "volunteer_hours": 48,
-                "state": "New Hampshire",
-                "city": "Exeter",
-                "zip_code": "03833",
-                "personal_statement": "As a dedicated student-athlete with a 4.49 weighted GPA...",
-                "languages_spoken": ["English", "French"],
-                "special_talents": [
-                    "Volleyball - College Recruitment Level",
-                    "French Language Proficiency",
-                ],
-                "profile_completed": True,
-                "completion_percentage": 88,
-                "created_at": "2025-01-01T10:00:00Z",
-                "updated_at": "2025-01-15T14:30:00Z",
-                "completed_at": "2025-01-15T14:30:00Z",
-            }
-        }
+        # Use model_config for Pydantic v2
+        from_attributes = True
 
-
-class ProfileSummary(BaseModel):
-    """Schema for profile completion summary used by ProfileView"""
-
-    profile_completed: bool
-    completion_percentage: int
-    has_basic_info: bool
-    has_academic_info: bool
-    has_personal_info: bool
-    missing_fields: List[str]
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "profile_completed": False,
-                "completion_percentage": 65,
-                "has_basic_info": True,
-                "has_academic_info": True,
-                "has_personal_info": False,
-                "missing_fields": ["Personal Statement", "Leadership Experience"],
-            }
-        }
-
-
-class ProfileFieldUpdate(BaseModel):
-    """Schema for updating a single profile field (used by ProfileBuilder auto-save)"""
-
-    field_name: str = Field(..., min_length=1)
-    field_value: Any
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "field_name": "high_school_name",
-                "field_value": "Lincoln High School",
-            }
-        }
+    @classmethod
+    def from_orm(cls, obj):
+        """Compatibility method for older Pydantic versions"""
+        return cls.model_validate(obj)
