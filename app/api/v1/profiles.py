@@ -28,7 +28,7 @@ async def create_profile(
         )
 
     profile = profile_service.create_profile(current_user["id"], profile_data)
-    return ProfileResponse.from_attributes(profile)
+    return ProfileResponse.from_orm(profile)
 
 
 @router.get("/", response_model=ProfileResponse)
@@ -44,7 +44,7 @@ async def get_profile(
             status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found"
         )
 
-    return ProfileResponse.from_attributes(profile)
+    return ProfileResponse.from_orm(profile)
 
 
 @router.patch("/", response_model=ProfileResponse)
@@ -71,7 +71,7 @@ async def update_profile(
             detail="Failed to update profile",
         )
 
-    return ProfileResponse.from_attributes(profile)
+    return ProfileResponse.from_orm(profile)
 
 
 @router.delete("/", status_code=status.HTTP_204_NO_CONTENT)
