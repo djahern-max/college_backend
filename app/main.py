@@ -1,8 +1,9 @@
 # app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from api.v1 import user
 from app.core.config import settings
-from app.api.v1 import auth, oauth, profiles
+from app.api.v1 import oauth, profiles
 from fastapi.routing import APIRoute
 from fastapi.responses import PlainTextResponse
 
@@ -22,7 +23,7 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
+app.include_router(user.router, prefix="/api/v1/auth", tags=["Authentication"])
 
 app.include_router(profiles.router, prefix="/api/v1/profiles", tags=["Profiles"])
 
