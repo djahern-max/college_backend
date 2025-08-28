@@ -159,3 +159,41 @@ class ProfileResponse(ProfileBase):
                 "completed_at": "2025-01-15T14:30:00Z",
             }
         }
+
+
+class ProfileSummary(BaseModel):
+    """Schema for profile completion summary used by ProfileView"""
+
+    profile_completed: bool
+    completion_percentage: int
+    has_basic_info: bool
+    has_academic_info: bool
+    has_personal_info: bool
+    missing_fields: List[str]
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "profile_completed": False,
+                "completion_percentage": 65,
+                "has_basic_info": True,
+                "has_academic_info": True,
+                "has_personal_info": False,
+                "missing_fields": ["Personal Statement", "Leadership Experience"],
+            }
+        }
+
+
+class ProfileFieldUpdate(BaseModel):
+    """Schema for updating a single profile field (used by ProfileBuilder auto-save)"""
+
+    field_name: str = Field(..., min_length=1)
+    field_value: Any
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "field_name": "high_school_name",
+                "field_value": "Lincoln High School",
+            }
+        }

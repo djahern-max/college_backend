@@ -1,84 +1,91 @@
 # app/api/v1/profiles.py
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from pydantic import BaseModel, Field
+from typing import Optional, List, Any
+
 
 from app.core.database import get_db
 from app.api.deps import get_current_user
 from app.services.profile import ProfileService
-from app.schemas.profile import ProfileCreate, ProfileUpdate, ProfileResponse
+from app.schemas.profile import (
+    ProfileCreate,
+    ProfileUpdate,
+    ProfileResponse,
+    ProfileSummary,
+    ProfileFieldUpdate,
+)
 
 router = APIRouter()
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED, response_model=ProfileResponse)
-async def create_profile(
+@router.get("/me", response_model=ProfileResponse)
+async def get_my_profile(
+    current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    """Get current user's profile (creates empty one if doesn't exist)"""
+    profile_service = ProfileService(db)
+    profile = profile_service.get_or_create_profile(current_user["id"])
+    return ProfileResponse.from_orm(profile)
+
+
+@router.post("/", response_model=ProfileResponse)
+async def create_or_update_profile(
     profile_data: ProfileCreate,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """CREATE - Create a new profile for the current user"""
+    """Create new profile or update existing one (upsert pattern)"""
     profile_service = ProfileService(db)
-
-    # Check if profile already exists
-    existing_profile = profile_service.get_profile_by_user_id(current_user["id"])
-    if existing_profile:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Profile already exists. Use PATCH to update.",
-        )
-
-    profile = profile_service.create_profile(current_user["id"], profile_data)
-    return ProfileResponse.from_orm(profile)
-
-
-@router.get("/", response_model=ProfileResponse)
-async def get_profile(
-    current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)
-):
-    """READ - Get current user's profile"""
-    profile_service = ProfileService(db)
-    profile = profile_service.get_profile_by_user_id(current_user["id"])
-
-    if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found"
-        )
-
+    profile = profile_service.upsert_profile(current_user["id"], profile_data)
     return ProfileResponse.from_orm(profile)
 
 
 @router.patch("/", response_model=ProfileResponse)
-async def update_profile(
+async def update_profile_fields(
     profile_data: ProfileUpdate,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """UPDATE - Update current user's profile"""
+    """Update specific profile fields (creates profile if doesn't exist)"""
+    profile_service = ProfileService(db)
+    profile = profile_service.update_profile_fields(current_user["id"], profile_data)
+    return ProfileResponse.from_orm(profile)
+
+
+@router.patch("/field", response_model=ProfileResponse)
+async def update_single_field(
+    field_update: ProfileFieldUpdate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update a single profile field (for auto-save functionality)"""
     profile_service = ProfileService(db)
 
-    # Check if profile exists
-    existing_profile = profile_service.get_profile_by_user_id(current_user["id"])
-    if not existing_profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Profile not found. Use POST to create a new profile.",
+    try:
+        profile = profile_service.update_single_field(
+            current_user["id"], field_update.field_name, field_update.field_value
         )
+        return ProfileResponse.from_orm(profile)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    profile = profile_service.update_profile(current_user["id"], profile_data)
-    if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update profile",
-        )
 
-    return ProfileResponse.from_orm(profile)
+@router.get("/summary", response_model=ProfileSummary)
+async def get_profile_summary(
+    current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    """Get profile completion summary"""
+    profile_service = ProfileService(db)
+    return profile_service.get_profile_summary(current_user["id"])
 
 
 @router.delete("/", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_profile(
     current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    """DELETE - Delete current user's profile"""
+    """Delete current user's profile"""
     profile_service = ProfileService(db)
     deleted = profile_service.delete_profile(current_user["id"])
 
