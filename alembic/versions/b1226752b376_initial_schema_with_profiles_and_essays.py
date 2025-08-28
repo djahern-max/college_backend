@@ -1,8 +1,8 @@
-"""Initial complete schema
+"""Initial schema with profiles and essays
 
-Revision ID: ca77f9f8bb62
+Revision ID: b1226752b376
 Revises: 
-Create Date: 2025-08-28 05:28:11.822512
+Create Date: 2025-08-28 05:47:29.334518
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = 'ca77f9f8bb62'
+revision: str = 'b1226752b376'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -91,14 +91,15 @@ def upgrade() -> None:
     sa.Column('preferred_college_size', sa.String(length=50), nullable=True),
     sa.Column('preferred_college_location', sa.String(length=100), nullable=True),
     sa.Column('college_application_status', sa.String(length=50), nullable=True),
-    sa.Column('personal_statement', sa.Text(), nullable=True),
-    sa.Column('leadership_experience', sa.Text(), nullable=True),
-    sa.Column('challenges_overcome', sa.Text(), nullable=True),
+    sa.Column('has_personal_statement', sa.Boolean(), nullable=True),
+    sa.Column('has_leadership_essay', sa.Boolean(), nullable=True),
+    sa.Column('has_challenges_essay', sa.Boolean(), nullable=True),
+    sa.Column('has_diversity_essay', sa.Boolean(), nullable=True),
     sa.Column('scholarship_types_interested', postgresql.ARRAY(sa.String()), nullable=True),
     sa.Column('application_deadline_preference', sa.String(length=50), nullable=True),
     sa.Column('languages_spoken', postgresql.ARRAY(sa.String()), nullable=True),
     sa.Column('special_talents', postgresql.ARRAY(sa.String()), nullable=True),
-    sa.Column('additional_info', sa.Text(), nullable=True),
+    sa.Column('additional_notes', sa.String(length=500), nullable=True),
     sa.Column('profile_completed', sa.Boolean(), nullable=False),
     sa.Column('completion_percentage', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),

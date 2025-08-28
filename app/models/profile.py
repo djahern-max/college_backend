@@ -1,9 +1,8 @@
-# app/models/profile.py
+# app/models/profile.py - UPDATED VERSION
 from sqlalchemy import (
     Column,
     Integer,
     String,
-    Text,
     Boolean,
     Float,
     DateTime,
@@ -21,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class UserProfile(Base):
     """
-    User Profile model matching the frontend ProfileBuilder and ProfileView requirements
+    User Profile model - essays moved to separate Essay table
     """
 
     __tablename__ = "user_profiles"
@@ -35,23 +34,20 @@ class UserProfile(Base):
     # =========================
     # BASIC INFORMATION SECTION
     # =========================
-    date_of_birth = Column(String, nullable=True)  # Format: YYYY-MM-DD
+    date_of_birth = Column(String, nullable=True)
     phone_number = Column(String(20), nullable=True)
     high_school_name = Column(String(255), nullable=True)
     graduation_year = Column(Integer, nullable=True)
-    gpa = Column(Float, nullable=True)  # Scale of 4.0
+    gpa = Column(Float, nullable=True)
 
     # =========================
     # ACADEMIC INFORMATION
     # =========================
-    # Test Scores
-    sat_score = Column(Integer, nullable=True)  # Total SAT score (out of 1600)
-    act_score = Column(Integer, nullable=True)  # ACT composite score (out of 36)
-
-    # Academic Interests & Goals
+    sat_score = Column(Integer, nullable=True)
+    act_score = Column(Integer, nullable=True)
     intended_major = Column(String(255), nullable=True)
-    academic_interests = Column(ARRAY(String), nullable=True)  # Array of interests
-    career_goals = Column(ARRAY(String), nullable=True)  # Array of career goals
+    academic_interests = Column(ARRAY(String), nullable=True)
+    career_goals = Column(ARRAY(String), nullable=True)
 
     # =========================
     # ACTIVITIES & EXPERIENCE
@@ -59,16 +55,14 @@ class UserProfile(Base):
     extracurricular_activities = Column(ARRAY(String), nullable=True)
     volunteer_experience = Column(ARRAY(String), nullable=True)
     volunteer_hours = Column(Integer, nullable=True)
-    work_experience = Column(JSON, nullable=True)  # Array of objects with job details
+    work_experience = Column(JSON, nullable=True)
 
     # =========================
     # BACKGROUND & DEMOGRAPHICS
     # =========================
     ethnicity = Column(ARRAY(String), nullable=True)
     first_generation_college = Column(Boolean, nullable=True)
-    household_income_range = Column(
-        String(50), nullable=True
-    )  # e.g., "$50,000-$75,000"
+    household_income_range = Column(String(50), nullable=True)
 
     # =========================
     # LOCATION INFORMATION
@@ -80,18 +74,17 @@ class UserProfile(Base):
     # =========================
     # COLLEGE PLANS
     # =========================
-    preferred_college_size = Column(
-        String(50), nullable=True
-    )  # e.g., "Small", "Medium", "Large"
+    preferred_college_size = Column(String(50), nullable=True)
     preferred_college_location = Column(String(100), nullable=True)
     college_application_status = Column(String(50), nullable=True)
 
     # =========================
-    # ESSAYS & PERSONAL STATEMENTS
+    # ESSAY STATUS (BOOLEAN FLAGS)
     # =========================
-    personal_statement = Column(Text, nullable=True)
-    leadership_experience = Column(Text, nullable=True)
-    challenges_overcome = Column(Text, nullable=True)
+    has_personal_statement = Column(Boolean, default=False)
+    has_leadership_essay = Column(Boolean, default=False)
+    has_challenges_essay = Column(Boolean, default=False)
+    has_diversity_essay = Column(Boolean, default=False)
 
     # =========================
     # SCHOLARSHIP PREFERENCES
@@ -104,7 +97,7 @@ class UserProfile(Base):
     # =========================
     languages_spoken = Column(ARRAY(String), nullable=True)
     special_talents = Column(ARRAY(String), nullable=True)
-    additional_info = Column(Text, nullable=True)
+    additional_notes = Column(String(500), nullable=True)  # Short notes only
 
     # =========================
     # PROFILE STATUS & METADATA
@@ -125,106 +118,62 @@ class UserProfile(Base):
     # RELATIONSHIPS
     # =========================
     user = relationship("User", back_populates="profile")
+    essays = relationship(
+        "Essay", back_populates="profile", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return f"<UserProfile(id={self.id}, user_id={self.user_id}, completed={self.profile_completed})>"
 
-    @property
-    def is_basic_info_complete(self) -> bool:
-        """Check if basic information section is complete"""
-        try:
-            return bool(
-                self.high_school_name and self.graduation_year and self.gpa is not None
-            )
-        except Exception as e:
-            logger.error(f"Error checking basic info completion: {str(e)}")
-            return False
-
-    @property
-    def is_academic_info_complete(self) -> bool:
-        """Check if academic information section is complete"""
-        try:
-            return bool(
-                self.intended_major
-                and (self.sat_score or self.act_score)
-                and self.academic_interests
-            )
-        except Exception as e:
-            logger.error(f"Error checking academic info completion: {str(e)}")
-            return False
-
-    @property
-    def is_personal_info_complete(self) -> bool:
-        """Check if personal information section is complete"""
-        try:
-            return bool(
-                self.personal_statement
-                and self.extracurricular_activities
-                and self.volunteer_experience
-            )
-        except Exception as e:
-            logger.error(f"Error checking personal info completion: {str(e)}")
-            return False
-
     def calculate_completion_percentage(self) -> int:
-        """
-        Calculate profile completion percentage based on filled fields
-        Matches the logic expected by ProfileBuilder and ProfileView
-        """
+        """Calculate profile completion percentage"""
         try:
             total_fields = 0
             completed_fields = 0
 
-            # Define weighted sections based on ProfileBuilder sections
-            basic_fields = [
+            # Core required fields
+            core_fields = [
                 self.high_school_name,
                 self.graduation_year,
                 self.gpa,
-                self.date_of_birth,
-                self.phone_number,
+                self.intended_major,
+                self.state,
             ]
 
+            # Academic fields
             academic_fields = [
-                self.intended_major,
                 self.academic_interests,
                 self.career_goals,
-                self.sat_score or self.act_score,  # Either SAT or ACT counts
+                bool(self.sat_score or self.act_score),  # Either test score
             ]
 
-            activities_fields = [
+            # Activity fields
+            activity_fields = [
                 self.extracurricular_activities,
                 self.volunteer_experience,
                 self.volunteer_hours,
-                self.work_experience,
             ]
 
-            background_fields = [
-                self.ethnicity,
-                self.household_income_range,
-                self.state,
-                self.city,
-            ]
-
-            essays_fields = [
-                self.personal_statement,
-                self.leadership_experience,
-                self.challenges_overcome,
-            ]
-
-            preferences_fields = [
+            # Personal fields
+            personal_fields = [
                 self.scholarship_types_interested,
-                self.preferred_college_size,
                 self.languages_spoken,
+                self.special_talents,
+            ]
+
+            # Essay completion (check if essays exist)
+            essay_completion = [
+                self.has_personal_statement,
+                self.has_leadership_essay,
             ]
 
             # Count all fields
             all_sections = [
-                basic_fields,
+                core_fields,
                 academic_fields,
-                activities_fields,
-                background_fields,
-                essays_fields,
-                preferences_fields,
+                activity_fields,
+                personal_fields,
+                essay_completion,
             ]
 
             for section in all_sections:
@@ -233,7 +182,7 @@ class UserProfile(Base):
                     if field:
                         if isinstance(field, list) and len(field) > 0:
                             completed_fields += 1
-                        elif not isinstance(field, list):
+                        elif not isinstance(field, list) and field:
                             completed_fields += 1
 
             if total_fields == 0:
@@ -249,12 +198,15 @@ class UserProfile(Base):
         try:
             self.completion_percentage = self.calculate_completion_percentage()
 
+            # Update essay flags based on actual essays
+            # This would be updated when essays are created/deleted
+
             # Mark as completed if >= 80% complete and has minimum required fields
             minimum_required = (
                 self.high_school_name
                 and self.graduation_year
                 and self.intended_major
-                and self.personal_statement
+                and self.has_personal_statement  # Requires at least personal statement essay
             )
 
             self.profile_completed = (
@@ -266,33 +218,11 @@ class UserProfile(Base):
 
         except Exception as e:
             logger.error(f"Error updating completion status: {str(e)}")
-            # Set safe defaults
             self.completion_percentage = 0
             self.profile_completed = False
 
-    def get_missing_fields(self) -> list:
-        """Get list of missing required fields for ProfileView display"""
-        try:
-            missing = []
-
-            if not self.high_school_name:
-                missing.append("High School Name")
-            if not self.graduation_year:
-                missing.append("Graduation Year")
-            if not self.gpa:
-                missing.append("GPA")
-            if not self.intended_major:
-                missing.append("Intended Major")
-            if not self.personal_statement:
-                missing.append("Personal Statement")
-            if not (self.sat_score or self.act_score):
-                missing.append("SAT or ACT Score")
-            if not self.academic_interests:
-                missing.append("Academic Interests")
-            if not self.extracurricular_activities:
-                missing.append("Extracurricular Activities")
-
-            return missing
-        except Exception as e:
-            logger.error(f"Error getting missing fields: {str(e)}")
-            return ["Error calculating missing fields"]
+    def update_essay_flags(self):
+        """Update essay boolean flags based on actual essays (called from essay service)"""
+        # This method would be called whenever essays are created/updated/deleted
+        # For now, this is a placeholder - the actual logic would query the essays table
+        pass
