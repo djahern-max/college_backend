@@ -3,6 +3,12 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
+from app.services.scholarship_extractor import (
+    ScholarshipExtractor,
+    ScholarshipEnrichmentService,
+)
+from pydantic import BaseModel, HttpUrl
+
 from app.core.database import get_db
 from app.api.deps import get_current_user
 from app.services.scholarship import ScholarshipService
@@ -20,6 +26,10 @@ from app.schemas.scholarship import (
     BulkMatchingResponse,
     ScholarshipVerificationUpdate,
 )
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -544,4 +554,304 @@ async def get_my_recommendations(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get recommendations: {str(e)}",
+        )
+
+
+# Add these schemas at the top of the file
+class ScholarshipExtractionRequest(BaseModel):
+    """Request to extract scholarship data from a URL"""
+
+    url: HttpUrl
+    auto_create: bool = False  # Whether to automatically create the scholarship
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "url": "https://www.fastweb.com/college-scholarships/scholarships/123456/stem-excellence-award",
+                "auto_create": False,
+            }
+        }
+
+
+class ScholarshipExtractionResponse(BaseModel):
+    """Response from scholarship extraction"""
+
+    success: bool
+    extraction_confidence: int
+    extracted_data: dict
+    suggested_scholarship: Optional[dict] = None
+    created_scholarship_id: Optional[int] = None
+    warnings: List[str] = []
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "extraction_confidence": 85,
+                "extracted_data": {
+                    "title": "STEM Excellence Scholarship",
+                    "organization": "Tech Future Foundation",
+                    "amount_exact": 5000,
+                    "min_gpa": 3.5,
+                    "essay_required": True,
+                },
+                "suggested_scholarship": {
+                    "scholarship_type": "stem",
+                    "difficulty_level": "moderate",
+                },
+                "warnings": ["Could not extract application deadline"],
+            }
+        }
+
+
+# Add these endpoints to the scholarships router
+
+
+@router.post("/extract", response_model=ScholarshipExtractionResponse)
+async def extract_scholarship_data(
+    extraction_request: ScholarshipExtractionRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Extract scholarship data from a URL using intelligent parsing.
+    Optionally auto-create the scholarship if extraction confidence is high.
+    """
+    try:
+        # Initialize services
+        extractor = ScholarshipExtractor()
+        enrichment_service = ScholarshipEnrichmentService()
+
+        # Extract data from URL
+        extracted_data = await extractor.extract_from_url(str(extraction_request.url))
+
+        # Check if extraction was successful
+        if extracted_data.get("error"):
+            return ScholarshipExtractionResponse(
+                success=False,
+                extraction_confidence=0,
+                extracted_data=extracted_data,
+                warnings=[f"Extraction failed: {extracted_data['error']}"],
+            )
+
+        confidence = extracted_data.get("extraction_confidence", 0)
+        warnings = []
+        created_scholarship_id = None
+        suggested_scholarship = None
+
+        # Generate enriched scholarship data
+        try:
+            scholarship_create = await enrichment_service.enrich_scholarship_data(
+                extracted_data
+            )
+            suggested_scholarship = scholarship_create.model_dump()
+        except Exception as e:
+            warnings.append(f"Failed to enrich data: {str(e)}")
+
+        # Auto-create if requested and confidence is high enough
+        if (
+            extraction_request.auto_create
+            and confidence >= 70
+            and suggested_scholarship
+            and extracted_data.get("title")
+            and extracted_data.get("organization")
+        ):
+
+            try:
+                service = ScholarshipService(db)
+                scholarship = service.create_scholarship(
+                    scholarship_create, created_by_user_id=current_user["id"]
+                )
+                created_scholarship_id = scholarship.id
+            except Exception as e:
+                warnings.append(f"Auto-creation failed: {str(e)}")
+
+        # Add extraction quality warnings
+        if confidence < 50:
+            warnings.append("Low extraction confidence - manual review recommended")
+        if not extracted_data.get("amount_exact"):
+            warnings.append("Could not extract scholarship amount")
+        if not extracted_data.get("deadline"):
+            warnings.append("Could not extract application deadline")
+
+        # Cleanup
+        await extractor.close()
+        await enrichment_service.close()
+
+        return ScholarshipExtractionResponse(
+            success=True,
+            extraction_confidence=confidence,
+            extracted_data=extracted_data,
+            suggested_scholarship=suggested_scholarship,
+            created_scholarship_id=created_scholarship_id,
+            warnings=warnings,
+        )
+
+    except Exception as e:
+        logger.error(f"Scholarship extraction failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Extraction failed: {str(e)}",
+        )
+
+
+@router.post("/extract/bulk", response_model=dict)
+async def bulk_extract_scholarships(
+    urls: List[HttpUrl],
+    auto_create_threshold: int = Query(80, ge=0, le=100),
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Extract scholarship data from multiple URLs in bulk.
+    Auto-creates scholarships that meet the confidence threshold.
+    """
+    if len(urls) > 10:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Maximum 10 URLs per bulk extraction",
+        )
+
+    try:
+        extractor = ScholarshipExtractor()
+        enrichment_service = ScholarshipEnrichmentService()
+        service = ScholarshipService(db)
+
+        results = []
+        created_count = 0
+
+        for url in urls:
+            try:
+                # Extract data
+                extracted_data = await extractor.extract_from_url(str(url))
+                confidence = extracted_data.get("extraction_confidence", 0)
+
+                result = {
+                    "url": str(url),
+                    "success": not extracted_data.get("error"),
+                    "confidence": confidence,
+                    "created": False,
+                    "error": extracted_data.get("error"),
+                }
+
+                # Auto-create if confidence meets threshold
+                if (
+                    not extracted_data.get("error")
+                    and confidence >= auto_create_threshold
+                    and extracted_data.get("title")
+                    and extracted_data.get("organization")
+                ):
+
+                    try:
+                        scholarship_create = (
+                            await enrichment_service.enrich_scholarship_data(
+                                extracted_data
+                            )
+                        )
+                        scholarship = service.create_scholarship(
+                            scholarship_create, created_by_user_id=current_user["id"]
+                        )
+                        result["created"] = True
+                        result["scholarship_id"] = scholarship.id
+                        created_count += 1
+                    except Exception as e:
+                        result["creation_error"] = str(e)
+
+                results.append(result)
+
+            except Exception as e:
+                results.append(
+                    {
+                        "url": str(url),
+                        "success": False,
+                        "error": str(e),
+                        "created": False,
+                    }
+                )
+
+        # Cleanup
+        await extractor.close()
+        await enrichment_service.close()
+
+        return {
+            "total_urls": len(urls),
+            "successful_extractions": len([r for r in results if r["success"]]),
+            "scholarships_created": created_count,
+            "results": results,
+        }
+
+    except Exception as e:
+        logger.error(f"Bulk extraction failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Bulk extraction failed: {str(e)}",
+        )
+
+
+@router.post("/preview-extraction")
+async def preview_extraction(
+    url: HttpUrl,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Preview what data would be extracted from a URL without creating a scholarship.
+    Useful for testing the extraction before committing.
+    """
+    try:
+        extractor = ScholarshipExtractor()
+        extracted_data = await extractor.extract_from_url(str(url))
+        await extractor.close()
+
+        return {
+            "url": str(url),
+            "preview": extracted_data,
+            "extraction_confidence": extracted_data.get("extraction_confidence", 0),
+            "key_fields_found": {
+                "title": bool(extracted_data.get("title")),
+                "organization": bool(extracted_data.get("organization")),
+                "description": bool(extracted_data.get("description")),
+                "amount": bool(extracted_data.get("amount_exact")),
+                "deadline": bool(extracted_data.get("deadline")),
+                "requirements": any(
+                    [
+                        extracted_data.get("min_gpa"),
+                        extracted_data.get("min_sat_score"),
+                        extracted_data.get("min_act_score"),
+                        extracted_data.get("essay_required"),
+                    ]
+                ),
+            },
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Preview failed: {str(e)}",
+        )
+
+
+@router.get("/extraction/stats")
+async def get_extraction_statistics(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get statistics about scholarship extractions and success rates.
+    """
+    try:
+        # This would require tracking extraction attempts in the database
+        # For now, return mock statistics
+        return {
+            "total_extractions": 0,
+            "successful_extractions": 0,
+            "average_confidence": 0.0,
+            "auto_created_count": 0,
+            "common_extraction_sources": [],
+            "extraction_success_by_domain": {},
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get extraction statistics: {str(e)}",
         )
