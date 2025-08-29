@@ -51,7 +51,6 @@ class User(Base):
     oauth_accounts = relationship(
         "OAuthAccount", back_populates="user", cascade="all, delete-orphan"
     )
-
     profile = relationship(
         "UserProfile",
         back_populates="user",
@@ -63,6 +62,3 @@ class User(Base):
     scholarship_matches = relationship(
         "ScholarshipMatch", back_populates="user", cascade="all, delete-orphan"
     )
-
-    # Essay relationships
-    essays = relationship("Essay", back_populates="user", cascade="all, delete-orphan")
