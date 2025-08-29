@@ -344,9 +344,9 @@ class ScholarshipSearchFilter(BaseModel):
 
     # Sorting
     sort_by: str = Field(
-        "match_score", regex="^(match_score|deadline|amount|created_at|title)$"
+        "created_at", pattern="^(match_score|deadline|amount|created_at|title)$"
     )
-    sort_order: str = Field("desc", regex="^(asc|desc)$")
+    sort_order: str = Field("desc", pattern="^(asc|desc)$")
 
     class Config:
         json_schema_extra = {
