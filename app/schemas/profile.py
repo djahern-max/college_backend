@@ -57,11 +57,6 @@ class ProfileBase(BaseModel):
     preferred_college_location: Optional[str] = None
     college_application_status: Optional[str] = None
 
-    # Essays & Personal Statements
-    personal_statement: Optional[str] = None
-    leadership_experience: Optional[str] = None
-    challenges_overcome: Optional[str] = None
-
     # Scholarship Information
     scholarship_types_interested: Optional[List[str]] = None
     application_deadline_preference: Optional[str] = None
