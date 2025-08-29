@@ -58,3 +58,11 @@ class User(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
+
+    # Scholarship relationships
+    scholarship_matches = relationship(
+        "ScholarshipMatch", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    # Essay relationships
+    essays = relationship("Essay", back_populates="user", cascade="all, delete-orphan")

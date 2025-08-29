@@ -13,10 +13,11 @@ from app.core.config import settings
 
 # Import ALL your models here so they're registered with SQLAlchemy
 from app.models.user import User
+from app.models.profile import UserProfile
+from app.models.oauth import OAuthAccount, OAuthState
 
-# Import other models as you create them (commented out for now):
-# from app.models.profile import Profile
-from app.models.oauth import OAuthAccount
+# Add scholarship models when created
+from app.models.scholarship import Scholarship, ScholarshipMatch
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
