@@ -118,9 +118,6 @@ class UserProfile(Base):
     # RELATIONSHIPS
     # =========================
     user = relationship("User", back_populates="profile")
-    essays = relationship(
-        "Essay", back_populates="profile", cascade="all, delete-orphan"
-    )
 
     def __repr__(self):
         return f"<UserProfile(id={self.id}, user_id={self.user_id}, completed={self.profile_completed})>"
