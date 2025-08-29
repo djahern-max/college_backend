@@ -23,8 +23,9 @@ app.add_middleware(
 
 # Include routers (only the ones that exist)
 app.include_router(user.router, prefix="/api/v1/auth", tags=["Authentication"])
-app.include_router(profiles.router, prefix="/api/v1/profiles", tags=["Profiles"])
 app.include_router(oauth.router, prefix="/api/v1/oauth", tags=["OAuth"])
+app.include_router(profiles.router, prefix="/api/v1/profiles", tags=["Profiles"])
+
 app.include_router(
     scholarships.router, prefix="/api/v1/scholarships", tags=["Scholarships"]
 )
