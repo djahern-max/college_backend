@@ -153,6 +153,10 @@ class ScholarshipBase(BaseModel):
 # ===========================
 
 
+# Replace the existing json_schema_extra in your ScholarshipCreate class
+# in app/schemas/scholarship.py
+
+
 class ScholarshipCreate(ScholarshipBase):
     """Schema for creating scholarships"""
 
@@ -161,28 +165,126 @@ class ScholarshipCreate(ScholarshipBase):
     class Config:
         json_schema_extra = {
             "example": {
-                "title": "STEM Excellence Scholarship",
-                "description": "Supporting outstanding students pursuing STEM degrees",
-                "organization": "Tech Future Foundation",
-                "website_url": "https://techfuture.org/scholarships",
-                "application_url": "https://techfuture.org/apply",
+                # ===========================
+                # BASIC INFORMATION
+                # ===========================
+                "title": "Future Leaders in Technology Scholarship",
+                "description": "Supporting exceptional students pursuing STEM degrees who demonstrate leadership potential, academic excellence, and commitment to using technology for positive social impact. Recipients receive mentorship, internship opportunities, and networking access.",
+                "organization": "Tech Innovation Foundation",
+                "website_url": "https://techinnovation.org/scholarships",
+                "application_url": "https://apply.techinnovation.org/future-leaders",
+                # ===========================
+                # CLASSIFICATION
+                # ===========================
                 "scholarship_type": "stem",
-                "categories": ["Computer Science", "Engineering", "Mathematics"],
-                "difficulty_level": "moderate",
-                "amount_exact": 5000,
+                "categories": [
+                    "Computer Science",
+                    "Software Engineering",
+                    "Data Science",
+                    "Cybersecurity",
+                ],
+                "difficulty_level": "hard",
+                # ===========================
+                # FINANCIAL INFORMATION
+                # ===========================
+                "amount_min": 7500,
+                "amount_max": 15000,
                 "is_renewable": True,
                 "renewal_years": 4,
-                "min_gpa": 3.5,
-                "min_sat_score": 1300,
+                "number_of_awards": 25,
+                # ===========================
+                # ACADEMIC REQUIREMENTS
+                # ===========================
+                "min_gpa": 3.7,
+                "min_sat_score": 1450,
+                "min_act_score": 33,
                 "required_majors": [
                     "Computer Science",
                     "Software Engineering",
                     "Data Science",
+                    "Information Technology",
+                    "Computer Engineering",
                 ],
-                "eligible_states": ["CA", "NY", "TX", "FL"],
+                "academic_level": ["undergraduate"],
+                # ===========================
+                # DEMOGRAPHIC REQUIREMENTS
+                # ===========================
+                "eligible_ethnicities": [
+                    "African American",
+                    "Hispanic/Latino",
+                    "Native American",
+                ],
+                "first_generation_college_required": None,
+                # ===========================
+                # FINANCIAL NEED
+                # ===========================
+                "income_max": 100000,
+                "need_based_required": True,
+                # ===========================
+                # GEOGRAPHIC REQUIREMENTS
+                # ===========================
+                "eligible_states": ["CA", "NY", "TX", "FL", "WA", "IL", "PA"],
+                "eligible_cities": [
+                    "San Francisco",
+                    "New York",
+                    "Austin",
+                    "Seattle",
+                    "Boston",
+                ],
+                "international_students_eligible": False,
+                # ===========================
+                # EDUCATION REQUIREMENTS
+                # ===========================
+                "graduation_year_min": 2025,
+                "graduation_year_max": 2027,
+                # ===========================
+                # ACTIVITY REQUIREMENTS
+                # ===========================
+                "required_activities": [
+                    "STEM Club Participation",
+                    "Programming Projects",
+                    "Technology Leadership",
+                    "Community Tech Volunteer Work",
+                ],
+                "volunteer_hours_min": 40,
+                "leadership_required": True,
+                "special_talents": [
+                    "Programming",
+                    "Web Development",
+                    "Mobile App Development",
+                    "Data Analysis",
+                    "Machine Learning",
+                ],
+                # ===========================
+                # APPLICATION REQUIREMENTS
+                # ===========================
                 "essay_required": True,
+                "essay_topics": [
+                    "How will you use technology to solve a real-world problem?",
+                    "Describe a coding project that demonstrates your skills",
+                    "What does diversity in technology mean to you?",
+                ],
+                "essay_word_limit": 750,
+                "transcript_required": True,
+                "recommendation_letters_required": 3,
+                "portfolio_required": True,
+                "interview_required": True,
                 "personal_statement_required": True,
-                "deadline": "2025-03-15T23:59:59Z",
+                "leadership_essay_required": True,
+                "community_service_essay_required": False,
+                # ===========================
+                # DATES & DEADLINES
+                # ===========================
+                "application_opens": "2024-10-01T00:00:00Z",
+                "deadline": "2025-02-15T23:59:59Z",
+                "award_date": "2025-04-15T00:00:00Z",
+                "is_rolling_deadline": False,
+                # ===========================
+                # ADDITIONAL PREFERENCES
+                # ===========================
+                "languages_preferred": ["Python", "JavaScript", "Java", "Spanish"],
+                "military_affiliation_required": False,
+                "employer_affiliation": "Must commit to 2-year mentorship program with partner tech companies",
             }
         }
 
