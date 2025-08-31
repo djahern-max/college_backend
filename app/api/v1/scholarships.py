@@ -3,28 +3,15 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
-from app.services.scholarship_extractor import (
-    ScholarshipExtractor,
-    ScholarshipEnrichmentService,
-)
-from pydantic import BaseModel, HttpUrl
 
 from app.core.database import get_db
 from app.api.deps import get_current_user
 from app.services.scholarship import ScholarshipService
 from app.schemas.scholarship import (
     ScholarshipCreate,
-    ScholarshipUpdate,
     ScholarshipResponse,
     ScholarshipSearchFilter,
-    ScholarshipMatchResponse,
-    ScholarshipMatchUpdate,
-    ScholarshipMatchSummary,
-    ScholarshipStatistics,
     BulkScholarshipCreate,
-    BulkMatchingRequest,
-    BulkMatchingResponse,
-    ScholarshipVerificationUpdate,
 )
 
 import logging
@@ -32,11 +19,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-# ===========================
-# SCHOLARSHIP CRUD OPERATIONS
-# ===========================
 
 
 @router.post(
@@ -80,35 +62,6 @@ async def list_scholarships(db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list scholarships: {str(e)}",
-        )
-
-
-@router.get("/{scholarship_id}", response_model=ScholarshipResponse)
-async def get_scholarship(
-    scholarship_id: int,
-    db: Session = Depends(get_db),
-):
-    """Get a specific scholarship by ID"""
-    try:
-        service = ScholarshipService(db)
-        scholarship = service.get_scholarship_by_id(scholarship_id)
-
-        if not scholarship:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship not found"
-            )
-
-        # Increment view count
-        service.increment_view_count(scholarship_id)
-
-        return ScholarshipResponse.model_validate(scholarship)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get scholarship: {str(e)}",
         )
 
 
@@ -180,6 +133,35 @@ async def search_scholarships(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to search scholarships: {str(e)}",
+        )
+
+
+@router.get("/{scholarship_id}", response_model=ScholarshipResponse)
+async def get_scholarship(
+    scholarship_id: int,
+    db: Session = Depends(get_db),
+):
+    """Get a specific scholarship by ID"""
+    try:
+        service = ScholarshipService(db)
+        scholarship = service.get_scholarship_by_id(scholarship_id)
+
+        if not scholarship:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship not found"
+            )
+
+        # Increment view count
+        service.increment_view_count(scholarship_id)
+
+        return ScholarshipResponse.model_validate(scholarship)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get scholarship: {str(e)}",
         )
 
 

@@ -1,11 +1,15 @@
-# app/schemas/scholarship.py
+# app/schemas/scholarship.py - SIMPLIFIED VERSION
 from pydantic import BaseModel, Field, validator
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from datetime import datetime
 from enum import Enum
 
 
-# Import enums from model
+# ===========================
+# ENUMS
+# ===========================
+
+
 class ScholarshipType(str, Enum):
     ACADEMIC_MERIT = "academic_merit"
     NEED_BASED = "need_based"
@@ -41,7 +45,7 @@ class DifficultyLevel(str, Enum):
 
 
 # ===========================
-# BASE SCHEMAS
+# CORE SCHEMAS
 # ===========================
 
 
@@ -148,175 +152,10 @@ class ScholarshipBase(BaseModel):
         return v
 
 
-# ===========================
-# CRUD SCHEMAS
-# ===========================
-
-
-# Replace the existing json_schema_extra in your ScholarshipCreate class
-# in app/schemas/scholarship.py
-
-
 class ScholarshipCreate(ScholarshipBase):
     """Schema for creating scholarships"""
 
     pass
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                # ===========================
-                # BASIC INFORMATION
-                # ===========================
-                "title": "Future Leaders in Technology Scholarship",
-                "description": "Supporting exceptional students pursuing STEM degrees who demonstrate leadership potential, academic excellence, and commitment to using technology for positive social impact. Recipients receive mentorship, internship opportunities, and networking access.",
-                "organization": "Tech Innovation Foundation",
-                "website_url": "https://techinnovation.org/scholarships",
-                "application_url": "https://apply.techinnovation.org/future-leaders",
-                # ===========================
-                # CLASSIFICATION
-                # ===========================
-                "scholarship_type": "stem",
-                "categories": [
-                    "Computer Science",
-                    "Software Engineering",
-                    "Data Science",
-                    "Cybersecurity",
-                ],
-                "difficulty_level": "hard",
-                # ===========================
-                # FINANCIAL INFORMATION
-                # ===========================
-                "amount_min": 7500,
-                "amount_max": 15000,
-                "is_renewable": True,
-                "renewal_years": 4,
-                "number_of_awards": 25,
-                # ===========================
-                # ACADEMIC REQUIREMENTS
-                # ===========================
-                "min_gpa": 3.7,
-                "min_sat_score": 1450,
-                "min_act_score": 33,
-                "required_majors": [
-                    "Computer Science",
-                    "Software Engineering",
-                    "Data Science",
-                    "Information Technology",
-                    "Computer Engineering",
-                ],
-                "academic_level": ["undergraduate"],
-                # ===========================
-                # DEMOGRAPHIC REQUIREMENTS
-                # ===========================
-                "eligible_ethnicities": [
-                    "African American",
-                    "Hispanic/Latino",
-                    "Native American",
-                ],
-                "first_generation_college_required": None,
-                # ===========================
-                # FINANCIAL NEED
-                # ===========================
-                "income_max": 100000,
-                "need_based_required": True,
-                # ===========================
-                # GEOGRAPHIC REQUIREMENTS
-                # ===========================
-                "eligible_states": ["CA", "NY", "TX", "FL", "WA", "IL", "PA"],
-                "eligible_cities": [
-                    "San Francisco",
-                    "New York",
-                    "Austin",
-                    "Seattle",
-                    "Boston",
-                ],
-                "international_students_eligible": False,
-                # ===========================
-                # EDUCATION REQUIREMENTS
-                # ===========================
-                "graduation_year_min": 2025,
-                "graduation_year_max": 2027,
-                # ===========================
-                # ACTIVITY REQUIREMENTS
-                # ===========================
-                "required_activities": [
-                    "STEM Club Participation",
-                    "Programming Projects",
-                    "Technology Leadership",
-                    "Community Tech Volunteer Work",
-                ],
-                "volunteer_hours_min": 40,
-                "leadership_required": True,
-                "special_talents": [
-                    "Programming",
-                    "Web Development",
-                    "Mobile App Development",
-                    "Data Analysis",
-                    "Machine Learning",
-                ],
-                # ===========================
-                # APPLICATION REQUIREMENTS
-                # ===========================
-                "essay_required": True,
-                "essay_topics": [
-                    "How will you use technology to solve a real-world problem?",
-                    "Describe a coding project that demonstrates your skills",
-                    "What does diversity in technology mean to you?",
-                ],
-                "essay_word_limit": 750,
-                "transcript_required": True,
-                "recommendation_letters_required": 3,
-                "portfolio_required": True,
-                "interview_required": True,
-                "personal_statement_required": True,
-                "leadership_essay_required": True,
-                "community_service_essay_required": False,
-                # ===========================
-                # DATES & DEADLINES
-                # ===========================
-                "application_opens": "2024-10-01T00:00:00Z",
-                "deadline": "2025-02-15T23:59:59Z",
-                "award_date": "2025-04-15T00:00:00Z",
-                "is_rolling_deadline": False,
-                # ===========================
-                # ADDITIONAL PREFERENCES
-                # ===========================
-                "languages_preferred": ["Python", "JavaScript", "Java", "Spanish"],
-                "military_affiliation_required": False,
-                "employer_affiliation": "Must commit to 2-year mentorship program with partner tech companies",
-            }
-        }
-
-
-class ScholarshipUpdate(BaseModel):
-    """Schema for updating scholarships - all fields optional"""
-
-    title: Optional[str] = Field(None, min_length=1, max_length=255)
-    description: Optional[str] = None
-    organization: Optional[str] = Field(None, min_length=1, max_length=255)
-    website_url: Optional[str] = None
-    application_url: Optional[str] = None
-
-    scholarship_type: Optional[ScholarshipType] = None
-    categories: Optional[List[str]] = None
-    difficulty_level: Optional[DifficultyLevel] = None
-    status: Optional[ScholarshipStatus] = None
-
-    # Financial
-    amount_min: Optional[int] = Field(None, ge=0)
-    amount_max: Optional[int] = Field(None, ge=0)
-    amount_exact: Optional[int] = Field(None, ge=0)
-    is_renewable: Optional[bool] = None
-
-    # Academic
-    min_gpa: Optional[float] = Field(None, ge=0.0, le=5.0)
-    min_sat_score: Optional[int] = Field(None, ge=400, le=1600)
-    min_act_score: Optional[int] = Field(None, ge=1, le=36)
-    required_majors: Optional[List[str]] = None
-
-    # Other fields can be added as needed for updates
-    deadline: Optional[datetime] = None
 
 
 class ScholarshipResponse(ScholarshipBase):
@@ -336,218 +175,51 @@ class ScholarshipResponse(ScholarshipBase):
 
 
 # ===========================
-# MATCHING SCHEMAS
-# ===========================
-
-
-class ScholarshipMatchCreate(BaseModel):
-    """Schema for creating scholarship matches"""
-
-    user_id: int
-    scholarship_id: int
-    match_score: float = Field(..., ge=0.0, le=100.0)
-    match_reasons: Optional[List[str]] = None
-    mismatch_reasons: Optional[List[str]] = None
-
-
-class ScholarshipMatchUpdate(BaseModel):
-    """Schema for updating user's scholarship match interaction"""
-
-    viewed: Optional[bool] = None
-    interested: Optional[bool] = None
-    applied: Optional[bool] = None
-    bookmarked: Optional[bool] = None
-    application_status: Optional[str] = None
-    notes: Optional[str] = None
-
-
-class ScholarshipMatchResponse(BaseModel):
-    """Schema for scholarship match responses"""
-
-    id: int
-    user_id: int
-    scholarship_id: int
-    match_score: float
-    match_reasons: Optional[List[str]] = None
-    mismatch_reasons: Optional[List[str]] = None
-
-    # User interaction
-    viewed: bool
-    interested: Optional[bool] = None
-    applied: bool
-    bookmarked: bool
-    application_status: Optional[str] = None
-    notes: Optional[str] = None
-
-    # Timestamps
-    match_date: datetime
-    viewed_at: Optional[datetime] = None
-    applied_at: Optional[datetime] = None
-
-    # Related scholarship info
-    scholarship: Optional[ScholarshipResponse] = None
-
-    class Config:
-        from_attributes = True
-
-
-# ===========================
-# SEARCH & FILTERING SCHEMAS
+# SEARCH FILTERS (Simplified)
 # ===========================
 
 
 class ScholarshipSearchFilter(BaseModel):
-    """Schema for scholarship search and filtering"""
+    """Schema for scholarship search and filtering - simplified"""
 
     # Pagination
     page: int = Field(1, ge=1)
     limit: int = Field(20, ge=1, le=100)
 
     # Basic filters
-    scholarship_type: Optional[ScholarshipType] = None
+    scholarship_type: Optional[str] = (
+        None  # Changed from ScholarshipType to str for simplicity
+    )
     active_only: bool = True
     verified_only: bool = False
-    featured_only: bool = False
 
     # Search terms
-    search_query: Optional[str] = None  # Search in title, description, organization
-    organization: Optional[str] = None
+    search_query: Optional[str] = None
 
     # Financial filters
     min_amount: Optional[int] = Field(None, ge=0)
     max_amount: Optional[int] = Field(None, ge=0)
-    renewable_only: Optional[bool] = None
 
     # Academic filters
     student_gpa: Optional[float] = Field(None, ge=0.0, le=5.0)
     student_sat_score: Optional[int] = Field(None, ge=400, le=1600)
     student_act_score: Optional[int] = Field(None, ge=1, le=36)
     student_major: Optional[str] = None
-
-    # Geographic filters
     student_state: Optional[str] = None
-    student_city: Optional[str] = None
 
-    # Demographic filters
-    is_first_generation: Optional[bool] = None
-    student_ethnicity: Optional[List[str]] = None
     # Application requirement filters
     requires_essay: Optional[bool] = None
-    requires_leadership: Optional[bool] = None
-    max_essay_requirements: Optional[int] = Field(None, ge=0, le=5)
 
     # Deadline filters
-    deadline_after: Optional[datetime] = None
-    deadline_before: Optional[datetime] = None
-    rolling_deadline_only: Optional[bool] = None
-
-    # Difficulty filter
-    max_difficulty: Optional[DifficultyLevel] = None
+    deadline_after: Optional[str] = None  # Simplified to string
 
     # Sorting
-    sort_by: str = Field(
-        "created_at", pattern="^(match_score|deadline|amount|created_at|title)$"
-    )
+    sort_by: str = Field("created_at", pattern="^(deadline|amount|created_at|title)$")
     sort_order: str = Field("desc", pattern="^(asc|desc)$")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "page": 1,
-                "limit": 20,
-                "scholarship_type": "stem",
-                "active_only": True,
-                "verified_only": True,
-                "min_amount": 1000,
-                "student_gpa": 3.7,
-                "student_sat_score": 1400,
-                "student_major": "Computer Science",
-                "student_state": "CA",
-                "requires_essay": False,
-                "deadline_after": "2025-01-01T00:00:00Z",
-                "sort_by": "match_score",
-                "sort_order": "desc",
-            }
-        }
-
 
 # ===========================
-# SUMMARY & ANALYTICS SCHEMAS
-# ===========================
-
-
-class ScholarshipMatchSummary(BaseModel):
-    """Summary of user's scholarship matches"""
-
-    user_id: int
-    total_matches: int
-    high_matches: int  # Score >= 80
-    medium_matches: int  # Score 60-79
-    low_matches: int  # Score < 60
-
-    # User interaction stats
-    viewed_count: int
-    applied_count: int
-    bookmarked_count: int
-    interested_count: int
-
-    # Score statistics
-    average_match_score: float
-    best_match_score: float
-
-    # Time-based stats
-    matches_this_month: int
-    upcoming_deadlines: int  # Next 30 days
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "user_id": 123,
-                "total_matches": 45,
-                "high_matches": 12,
-                "medium_matches": 23,
-                "low_matches": 10,
-                "viewed_count": 25,
-                "applied_count": 8,
-                "bookmarked_count": 15,
-                "interested_count": 20,
-                "average_match_score": 72.5,
-                "best_match_score": 94.2,
-                "matches_this_month": 8,
-                "upcoming_deadlines": 5,
-            }
-        }
-
-
-class ScholarshipStatistics(BaseModel):
-    """Platform-wide scholarship statistics"""
-
-    total_scholarships: int
-    active_scholarships: int
-    verified_scholarships: int
-    total_amount_available: int
-    scholarship_types: Dict[str, int]
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "total_scholarships": 1250,
-                "active_scholarships": 890,
-                "verified_scholarships": 654,
-                "total_amount_available": 15750000,
-                "scholarship_types": {
-                    "academic_merit": 234,
-                    "stem": 156,
-                    "need_based": 89,
-                    "diversity": 78,
-                    "community_service": 67,
-                },
-            }
-        }
-
-
-# ===========================
-# BATCH OPERATIONS
+# BULK OPERATIONS
 # ===========================
 
 
@@ -563,45 +235,3 @@ class BulkScholarshipCreate(BaseModel):
         if len(v) > 100:
             raise ValueError("Maximum 100 scholarships per batch")
         return v
-
-
-class BulkMatchingRequest(BaseModel):
-    """Schema for bulk matching operations"""
-
-    user_ids: Optional[List[int]] = None  # If None, match all users
-    scholarship_ids: Optional[List[int]] = None  # If None, match all scholarships
-    force_recalculate: bool = False
-    min_score_threshold: float = Field(30.0, ge=0.0, le=100.0)
-
-
-class BulkMatchingResponse(BaseModel):
-    """Response schema for bulk matching operations"""
-
-    users_processed: int
-    scholarships_processed: int
-    matches_created: int
-    matches_updated: int
-    processing_time_seconds: float
-    errors: List[str] = []
-
-
-# ===========================
-# ADMIN SCHEMAS
-# ===========================
-
-
-class ScholarshipVerificationUpdate(BaseModel):
-    """Schema for admin scholarship verification"""
-
-    verified: bool
-    verification_notes: Optional[str] = None
-    featured: Optional[bool] = None
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "verified": True,
-                "verification_notes": "Verified with organization. All information accurate as of 2025-01-01.",
-                "featured": False,
-            }
-        }
