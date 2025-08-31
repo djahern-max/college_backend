@@ -62,6 +62,27 @@ async def create_scholarship(
         )
 
 
+@router.get("/list", response_model=List[ScholarshipResponse])
+async def list_scholarships(db: Session = Depends(get_db)):
+    """Simple list of all scholarships"""
+    try:
+        from app.models.scholarship import Scholarship
+
+        # Direct database query - gets all scholarships
+        scholarships = db.query(Scholarship).limit(50).all()
+
+        return [
+            ScholarshipResponse.model_validate(scholarship)
+            for scholarship in scholarships
+        ]
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list scholarships: {str(e)}",
+        )
+
+
 @router.get("/{scholarship_id}", response_model=ScholarshipResponse)
 async def get_scholarship(
     scholarship_id: int,
