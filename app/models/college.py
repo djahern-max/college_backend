@@ -1,4 +1,4 @@
-# app/models/college.py
+# app/models/college.py - CLEAN CONVENTIONAL VERSION
 from sqlalchemy import (
     Column,
     Integer,
@@ -10,13 +10,15 @@ from sqlalchemy import (
     ForeignKey,
     JSON,
     Enum as SQLEnum,
+    Index,
+    CheckConstraint,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import logging
 
 logger = logging.getLogger(__name__)
@@ -51,7 +53,7 @@ class AdmissionDifficulty(str, Enum):
 
 class College(Base):
     """
-    College/University model with comprehensive data for matching
+    College/University model - Clean database-focused version
     """
 
     __tablename__ = "colleges"
@@ -61,19 +63,19 @@ class College(Base):
 
     # Basic Information
     name = Column(String(255), nullable=False, index=True)
-    short_name = Column(String(100), nullable=True)  # Common abbreviation
+    short_name = Column(String(100), nullable=True)
     website = Column(String(255), nullable=True)
 
     # Location
     city = Column(String(100), nullable=False)
     state = Column(String(50), nullable=False, index=True)
     zip_code = Column(String(10), nullable=True)
-    region = Column(String(50), nullable=True)  # Northeast, Southeast, etc.
+    region = Column(String(50), nullable=True, index=True)
 
     # Institution Type
     college_type = Column(SQLEnum(CollegeType), nullable=False, index=True)
-    is_historically_black = Column(Boolean, default=False)
-    is_hispanic_serving = Column(Boolean, default=False)
+    is_historically_black = Column(Boolean, default=False, index=True)
+    is_hispanic_serving = Column(Boolean, default=False, index=True)
     is_tribal_college = Column(Boolean, default=False)
     is_women_only = Column(Boolean, default=False)
     is_men_only = Column(Boolean, default=False)
@@ -85,7 +87,7 @@ class College(Base):
     college_size = Column(SQLEnum(CollegeSize), nullable=True, index=True)
 
     # Academic Information
-    acceptance_rate = Column(Float, nullable=True)  # 0.0 to 1.0
+    acceptance_rate = Column(Float, nullable=True, index=True)
     admission_difficulty = Column(
         SQLEnum(AdmissionDifficulty), nullable=True, index=True
     )
@@ -95,53 +97,51 @@ class College(Base):
     sat_math_75 = Column(Integer, nullable=True)
     sat_reading_25 = Column(Integer, nullable=True)
     sat_reading_75 = Column(Integer, nullable=True)
-    sat_total_25 = Column(Integer, nullable=True)
-    sat_total_75 = Column(Integer, nullable=True)
+    sat_total_25 = Column(Integer, nullable=True, index=True)
+    sat_total_75 = Column(Integer, nullable=True, index=True)
 
-    act_composite_25 = Column(Integer, nullable=True)
-    act_composite_75 = Column(Integer, nullable=True)
+    act_composite_25 = Column(Integer, nullable=True, index=True)
+    act_composite_75 = Column(Integer, nullable=True, index=True)
 
     # GPA Requirements
-    avg_gpa = Column(Float, nullable=True)
+    avg_gpa = Column(Float, nullable=True, index=True)
     min_gpa_recommended = Column(Float, nullable=True)
 
     # Financial Information
-    tuition_in_state = Column(Integer, nullable=True)
-    tuition_out_of_state = Column(Integer, nullable=True)
+    tuition_in_state = Column(Integer, nullable=True, index=True)
+    tuition_out_of_state = Column(Integer, nullable=True, index=True)
     room_and_board = Column(Integer, nullable=True)
-    total_cost_in_state = Column(Integer, nullable=True)
-    total_cost_out_of_state = Column(Integer, nullable=True)
+    total_cost_in_state = Column(Integer, nullable=True, index=True)
+    total_cost_out_of_state = Column(Integer, nullable=True, index=True)
 
     # Financial Aid
     avg_financial_aid = Column(Integer, nullable=True)
     percent_receiving_aid = Column(Float, nullable=True)
-    avg_net_price = Column(Integer, nullable=True)
+    avg_net_price = Column(Integer, nullable=True, index=True)
 
-    # Academic Programs
+    # Academic Programs (using GIN indexes for array operations)
     available_majors = Column(ARRAY(String), nullable=True)
     popular_majors = Column(ARRAY(String), nullable=True)
-    strong_programs = Column(
-        ARRAY(String), nullable=True
-    )  # Nationally recognized programs
+    strong_programs = Column(ARRAY(String), nullable=True)
 
     # Campus Life
-    campus_setting = Column(String(50), nullable=True)  # Urban, Suburban, Rural
+    campus_setting = Column(String(50), nullable=True, index=True)
     housing_guaranteed = Column(Boolean, default=False)
     greek_life_available = Column(Boolean, default=False)
 
     # Athletics
-    athletic_division = Column(String(20), nullable=True)  # D1, D2, D3, NAIA, etc.
+    athletic_division = Column(String(20), nullable=True, index=True)
     athletic_conferences = Column(ARRAY(String), nullable=True)
 
     # Rankings and Recognition
-    us_news_ranking = Column(Integer, nullable=True)
+    us_news_ranking = Column(Integer, nullable=True, index=True)
     forbes_ranking = Column(Integer, nullable=True)
     other_rankings = Column(JSON, nullable=True)
 
     # Outcomes
     graduation_rate_4_year = Column(Float, nullable=True)
-    graduation_rate_6_year = Column(Float, nullable=True)
-    retention_rate = Column(Float, nullable=True)
+    graduation_rate_6_year = Column(Float, nullable=True, index=True)
+    retention_rate = Column(Float, nullable=True, index=True)
     employment_rate = Column(Float, nullable=True)
     avg_starting_salary = Column(Integer, nullable=True)
 
@@ -165,9 +165,9 @@ class College(Base):
     interview_required = Column(Boolean, default=False)
 
     # Status and Verification
-    is_active = Column(Boolean, default=True, nullable=False)
-    is_verified = Column(Boolean, default=False, nullable=False)
-    data_source = Column(String(100), nullable=True)  # Where data came from
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    is_verified = Column(Boolean, default=False, nullable=False, index=True)
+    data_source = Column(String(100), nullable=True)
 
     # Timestamps
     created_at = Column(
@@ -180,294 +180,215 @@ class College(Base):
         "CollegeMatch", back_populates="college", cascade="all, delete-orphan"
     )
 
+    # Database constraints and indexes
+    __table_args__ = (
+        # Check constraints for data integrity
+        CheckConstraint(
+            "acceptance_rate >= 0 AND acceptance_rate <= 1",
+            name="check_acceptance_rate_range",
+        ),
+        CheckConstraint("avg_gpa >= 0 AND avg_gpa <= 5", name="check_gpa_range"),
+        CheckConstraint(
+            "sat_total_25 >= 400 AND sat_total_25 <= 1600",
+            name="check_sat_total_25_range",
+        ),
+        CheckConstraint(
+            "sat_total_75 >= 400 AND sat_total_75 <= 1600",
+            name="check_sat_total_75_range",
+        ),
+        CheckConstraint("sat_total_25 <= sat_total_75", name="check_sat_range_order"),
+        CheckConstraint(
+            "act_composite_25 >= 1 AND act_composite_25 <= 36",
+            name="check_act_25_range",
+        ),
+        CheckConstraint(
+            "act_composite_75 >= 1 AND act_composite_75 <= 36",
+            name="check_act_75_range",
+        ),
+        CheckConstraint(
+            "act_composite_25 <= act_composite_75", name="check_act_range_order"
+        ),
+        CheckConstraint(
+            "graduation_rate_4_year >= 0 AND graduation_rate_4_year <= 1",
+            name="check_grad_rate_4_range",
+        ),
+        CheckConstraint(
+            "graduation_rate_6_year >= 0 AND graduation_rate_6_year <= 1",
+            name="check_grad_rate_6_range",
+        ),
+        CheckConstraint(
+            "retention_rate >= 0 AND retention_rate <= 1",
+            name="check_retention_rate_range",
+        ),
+        CheckConstraint(
+            "tuition_in_state >= 0", name="check_tuition_in_state_positive"
+        ),
+        CheckConstraint(
+            "tuition_out_of_state >= 0", name="check_tuition_out_state_positive"
+        ),
+        CheckConstraint("total_enrollment >= 0", name="check_enrollment_positive"),
+        # Composite indexes for common query patterns
+        Index("idx_college_search", "is_active", "college_type", "state"),
+        Index("idx_college_academic", "acceptance_rate", "avg_gpa", "sat_total_25"),
+        Index(
+            "idx_college_financial",
+            "tuition_in_state",
+            "tuition_out_of_state",
+            "avg_net_price",
+        ),
+        Index("idx_college_outcomes", "graduation_rate_6_year", "retention_rate"),
+        Index("idx_college_rankings", "us_news_ranking", "is_active"),
+        # Partial indexes for active colleges only
+        Index(
+            "idx_active_colleges_type_state",
+            "college_type",
+            "state",
+            postgresql_where=(Column("is_active") == True),
+        ),
+        Index(
+            "idx_active_colleges_size_setting",
+            "college_size",
+            "campus_setting",
+            postgresql_where=(Column("is_active") == True),
+        ),
+    )
+
     def __repr__(self):
         return f"<College(id={self.id}, name='{self.name}', state='{self.state}')>"
 
-    def matches_profile_basic(self, profile) -> bool:
-        """Basic eligibility check for a student profile"""
-        try:
-            # GPA requirement
-            if self.min_gpa_recommended and profile.gpa:
-                if profile.gpa < self.min_gpa_recommended:
-                    return False
+    # ===========================
+    # SIMPLE PROPERTY METHODS (OK in models)
+    # ===========================
 
-            # Test score requirements (if college requires them)
-            if self.sat_total_25 and profile.sat_score:
-                if profile.sat_score < (
-                    self.sat_total_25 - 50
-                ):  # Allow some flexibility
-                    return False
+    @property
+    def display_name(self) -> str:
+        """Get display name (short name if available, otherwise full name)"""
+        return self.short_name or self.name
 
-            if self.act_composite_25 and profile.act_score:
-                if profile.act_score < (
-                    self.act_composite_25 - 2
-                ):  # Allow some flexibility
-                    return False
+    @property
+    def location_display(self) -> str:
+        """Get formatted location display"""
+        return f"{self.city}, {self.state}"
 
-            # Major availability
-            if self.available_majors and profile.intended_major:
-                if profile.intended_major not in self.available_majors:
-                    return False
+    @property
+    def is_public(self) -> bool:
+        """Check if college is public"""
+        return self.college_type == CollegeType.PUBLIC
 
-            return True
+    @property
+    def is_private(self) -> bool:
+        """Check if college is private (non-profit or for-profit)"""
+        return self.college_type in [
+            CollegeType.PRIVATE_NONPROFIT,
+            CollegeType.PRIVATE_FOR_PROFIT,
+        ]
 
-        except Exception as e:
-            logger.error(f"Error in basic matching for college {self.id}: {str(e)}")
-            return False
+    @property
+    def has_test_score_data(self) -> bool:
+        """Check if college has test score data"""
+        return bool(
+            (self.sat_total_25 and self.sat_total_75)
+            or (self.act_composite_25 and self.act_composite_75)
+        )
 
-    def calculate_match_score(self, profile) -> float:
-        """Calculate compatibility score (0-100) between college and student profile"""
-        try:
-            score = 0.0
-            max_score = 0.0
+    @property
+    def sat_range_display(self) -> Optional[str]:
+        """Get formatted SAT range display"""
+        if self.sat_total_25 and self.sat_total_75:
+            return f"{self.sat_total_25}-{self.sat_total_75}"
+        return None
 
-            # Academic Fit (40% of total score)
-            academic_score, academic_max = self._calculate_academic_score(profile)
-            score += academic_score
-            max_score += academic_max
+    @property
+    def act_range_display(self) -> Optional[str]:
+        """Get formatted ACT range display"""
+        if self.act_composite_25 and self.act_composite_75:
+            return f"{self.act_composite_25}-{self.act_composite_75}"
+        return None
 
-            # Financial Fit (20% of total score)
-            financial_score, financial_max = self._calculate_financial_score(profile)
-            score += financial_score
-            max_score += financial_max
-
-            # Location Preference (15% of total score)
-            location_score, location_max = self._calculate_location_score(profile)
-            score += location_score
-            max_score += location_max
-
-            # Size and Environment (15% of total score)
-            environment_score, environment_max = self._calculate_environment_score(
-                profile
-            )
-            score += environment_score
-            max_score += environment_max
-
-            # Program Strength (10% of total score)
-            program_score, program_max = self._calculate_program_score(profile)
-            score += program_score
-            max_score += program_max
-
-            if max_score == 0:
-                return 0.0
-
-            return round((score / max_score) * 100, 1)
-
-        except Exception as e:
-            logger.error(
-                f"Error calculating match score for college {self.id}: {str(e)}"
-            )
-            return 0.0
-
-    def _calculate_academic_score(self, profile) -> tuple:
-        """Calculate academic fit score"""
-        score = 0.0
-        max_score = 40.0
-
-        # GPA fit (15 points)
-        if self.avg_gpa and profile.gpa:
-            gpa_diff = abs(profile.gpa - self.avg_gpa)
-            if gpa_diff <= 0.2:
-                score += 15  # Perfect match
-            elif gpa_diff <= 0.5:
-                score += 12  # Good match
-            elif gpa_diff <= 0.8:
-                score += 8  # Acceptable match
-            else:
-                score += 3  # Reach/safety school
-
-        # Test score fit (15 points)
-        if profile.sat_score and self.sat_total_25 and self.sat_total_75:
-            if self.sat_total_25 <= profile.sat_score <= self.sat_total_75:
-                score += 15  # In range
-            elif profile.sat_score >= self.sat_total_75:
-                score += 12  # Above range (safety)
-            elif profile.sat_score >= (self.sat_total_25 - 100):
-                score += 8  # Slightly below (reach)
-            else:
-                score += 2  # Well below (high reach)
-        elif profile.act_score and self.act_composite_25 and self.act_composite_75:
-            if self.act_composite_25 <= profile.act_score <= self.act_composite_75:
-                score += 15
-            elif profile.act_score >= self.act_composite_75:
-                score += 12
-            elif profile.act_score >= (self.act_composite_25 - 3):
-                score += 8
-            else:
-                score += 2
-
-        # Admission difficulty vs. profile strength (10 points)
-        if self.acceptance_rate:
-            if self.acceptance_rate >= 0.7:  # Less competitive
-                score += 8
-            elif self.acceptance_rate >= 0.5:  # Moderately competitive
-                score += 10
-            elif self.acceptance_rate >= 0.3:  # Very competitive
-                score += 6
-            else:  # Highly competitive
-                score += 4
-
-        return score, max_score
-
-    def _calculate_financial_score(self, profile) -> tuple:
-        """Calculate financial fit score"""
-        score = 0.0
-        max_score = 20.0
-
-        if not profile.household_income_range:
-            return score, max_score
-
-        # Estimate financial capacity based on income range
-        income_mapping = {
-            "Under $25,000": 15000,
-            "$25,000 - $50,000": 37500,
-            "$50,000 - $75,000": 62500,
-            "$75,000 - $100,000": 87500,
-            "$100,000 - $150,000": 125000,
-            "Over $150,000": 200000,
+    @property
+    def tuition_display(self) -> Dict[str, Optional[int]]:
+        """Get tuition information formatted for display"""
+        return {
+            "in_state": self.tuition_in_state,
+            "out_of_state": self.tuition_out_of_state,
+            "has_in_state": self.tuition_in_state is not None,
+            "has_out_of_state": self.tuition_out_of_state is not None,
         }
 
-        estimated_income = income_mapping.get(profile.household_income_range, 50000)
-
-        # Calculate affordability
-        if profile.state == self.state and self.total_cost_in_state:
-            total_cost = self.total_cost_in_state
+    def get_relevant_cost(self, student_state: Optional[str] = None) -> Optional[int]:
+        """Get relevant cost based on student's residency - SIMPLE helper method"""
+        if student_state == self.state and self.total_cost_in_state:
+            return self.total_cost_in_state
         elif self.total_cost_out_of_state:
-            total_cost = self.total_cost_out_of_state
-        else:
-            return score, max_score
+            return self.total_cost_out_of_state
+        elif student_state == self.state and self.tuition_in_state:
+            return self.tuition_in_state
+        elif self.tuition_out_of_state:
+            return self.tuition_out_of_state
+        return None
 
-        # Consider financial aid
-        net_cost = total_cost
-        if self.avg_net_price:
-            net_cost = self.avg_net_price
+    def has_major(self, major: str) -> bool:
+        """Check if college offers a specific major - SIMPLE helper"""
+        if not self.available_majors or not major:
+            return False
+        return major in self.available_majors
 
-        # Score based on affordability
-        affordable_threshold = estimated_income * 0.3  # 30% of income
-        if net_cost <= affordable_threshold:
-            score += 20  # Very affordable
-        elif net_cost <= affordable_threshold * 1.5:
-            score += 15  # Affordable with some stretch
-        elif net_cost <= affordable_threshold * 2:
-            score += 10  # Challenging but possible
-        else:
-            score += 5  # Financial reach
+    def has_strong_program(self, program: str) -> bool:
+        """Check if college has a strong program in area - SIMPLE helper"""
+        if not self.strong_programs or not program:
+            return False
+        return program in self.strong_programs
 
-        return score, max_score
+    # ===========================
+    # VALIDATION METHODS (OK in models)
+    # ===========================
 
-    def _calculate_location_score(self, profile) -> tuple:
-        """Calculate location preference score"""
-        score = 0.0
-        max_score = 15.0
+    def validate_data(self) -> List[str]:
+        """Basic data validation - returns list of errors"""
+        errors = []
 
-        # In-state preference (10 points)
-        if profile.state == self.state:
-            score += 10
-        elif profile.preferred_college_location:
-            if profile.preferred_college_location.lower() in self.region.lower():
-                score += 6
-            else:
-                score += 2
-        else:
-            score += 5  # Neutral if no preference
+        # Required field validation
+        if not self.name or not self.name.strip():
+            errors.append("College name is required")
 
-        # Campus setting preference (5 points)
-        if profile.preferred_college_location:
-            if (
-                "urban" in profile.preferred_college_location.lower()
-                and self.campus_setting == "Urban"
-            ):
-                score += 5
-            elif (
-                "suburban" in profile.preferred_college_location.lower()
-                and self.campus_setting == "Suburban"
-            ):
-                score += 5
-            elif (
-                "rural" in profile.preferred_college_location.lower()
-                and self.campus_setting == "Rural"
-            ):
-                score += 5
-            else:
-                score += 2
-        else:
-            score += 3  # Neutral
+        if not self.city or not self.city.strip():
+            errors.append("City is required")
 
-        return score, max_score
+        if not self.state or not self.state.strip():
+            errors.append("State is required")
 
-    def _calculate_environment_score(self, profile) -> tuple:
-        """Calculate campus environment fit score"""
-        score = 0.0
-        max_score = 15.0
+        # Range validations
+        if self.acceptance_rate is not None and not (0 <= self.acceptance_rate <= 1):
+            errors.append("Acceptance rate must be between 0 and 1")
 
-        # Size preference (10 points)
-        if profile.preferred_college_size:
-            if profile.preferred_college_size.lower() == self.college_size.value:
-                score += 10
-            elif (
-                abs(
-                    CollegeSize.__members__[
-                        profile.preferred_college_size.upper()
-                    ].value
-                    - self.college_size.value
-                )
-                == 1
-            ):
-                score += 6  # Adjacent size category
-            else:
-                score += 2
-        else:
-            score += 6  # Neutral if no preference
+        if self.avg_gpa is not None and not (0 <= self.avg_gpa <= 5):
+            errors.append("Average GPA must be between 0 and 5")
 
-        # Diversity considerations (5 points)
-        if profile.ethnicity:
-            # Bonus for diverse campuses or those serving specific populations
-            if (
-                self.is_historically_black
-                and "Black or African American" in profile.ethnicity
-            ):
-                score += 5
-            elif self.is_hispanic_serving and any(
-                "Hispanic" in eth or "Latino" in eth for eth in profile.ethnicity
-            ):
-                score += 5
-            elif self.percent_white and self.percent_white < 0.7:  # Diverse campus
-                score += 4
-            else:
-                score += 3
-        else:
-            score += 3
+        # Test score validations
+        if (
+            self.sat_total_25
+            and self.sat_total_75
+            and self.sat_total_25 > self.sat_total_75
+        ):
+            errors.append("SAT 25th percentile cannot be higher than 75th percentile")
 
-        return score, max_score
+        if (
+            self.act_composite_25
+            and self.act_composite_75
+            and self.act_composite_25 > self.act_composite_75
+        ):
+            errors.append("ACT 25th percentile cannot be higher than 75th percentile")
 
-    def _calculate_program_score(self, profile) -> tuple:
-        """Calculate academic program strength score"""
-        score = 0.0
-        max_score = 10.0
+        return errors
 
-        if not profile.intended_major:
-            return score, max_score
-
-        # Major availability and strength
-        if self.available_majors and profile.intended_major in self.available_majors:
-            score += 5  # Major available
-
-            # Bonus for program strength
-            if self.strong_programs and profile.intended_major in self.strong_programs:
-                score += 3  # Nationally recognized program
-            elif self.popular_majors and profile.intended_major in self.popular_majors:
-                score += 2  # Popular program
-            else:
-                score += 1
-        else:
-            score += 1  # May have similar programs
-
-        return score, max_score
+    def is_valid(self) -> bool:
+        """Check if college data is valid"""
+        return len(self.validate_data()) == 0
 
 
 class CollegeMatch(Base):
     """
-    Student-College match results and tracking
+    Student-College match results and tracking - Clean version
     """
 
     __tablename__ = "college_matches"
@@ -477,23 +398,21 @@ class CollegeMatch(Base):
     college_id = Column(Integer, ForeignKey("colleges.id"), nullable=False, index=True)
 
     # Match scoring
-    match_score = Column(Float, nullable=False)  # 0-100
-    match_category = Column(String(20), nullable=True)  # "safety", "match", "reach"
+    match_score = Column(Float, nullable=False, index=True)
+    match_category = Column(
+        String(20), nullable=True, index=True
+    )  # "safety", "match", "reach"
     match_reasons = Column(ARRAY(String), nullable=True)
     concerns = Column(ARRAY(String), nullable=True)
 
     # User interaction tracking
-    viewed = Column(Boolean, default=False)
-    interested = Column(
-        Boolean, nullable=True
-    )  # True/False/None for interested/not/neutral
-    applied = Column(Boolean, default=False)
-    bookmarked = Column(Boolean, default=False)
+    viewed = Column(Boolean, default=False, index=True)
+    interested = Column(Boolean, nullable=True, index=True)  # True/False/None
+    applied = Column(Boolean, default=False, index=True)
+    bookmarked = Column(Boolean, default=False, index=True)
 
     # Application status
-    application_status = Column(
-        String(50), nullable=True
-    )  # "planning", "started", "submitted", "accepted", etc.
+    application_status = Column(String(50), nullable=True, index=True)
     application_deadline = Column(DateTime(timezone=True), nullable=True)
 
     # Notes
@@ -510,5 +429,104 @@ class CollegeMatch(Base):
     # Relationships
     college = relationship("College", back_populates="college_matches")
 
+    # Database constraints and indexes
+    __table_args__ = (
+        # Unique constraint to prevent duplicate matches
+        Index("idx_unique_user_college_match", "user_id", "college_id", unique=True),
+        # Composite indexes for common queries
+        Index("idx_user_matches_by_score", "user_id", "match_score"),
+        Index(
+            "idx_user_matches_by_category", "user_id", "match_category", "match_score"
+        ),
+        Index("idx_user_interactions", "user_id", "viewed", "interested", "applied"),
+        Index("idx_match_deadlines", "application_deadline", "user_id"),
+        # Partial indexes for active interactions
+        Index(
+            "idx_viewed_matches",
+            "user_id",
+            "viewed_at",
+            postgresql_where=(Column("viewed") == True),
+        ),
+        Index(
+            "idx_applied_matches",
+            "user_id",
+            "applied_at",
+            postgresql_where=(Column("applied") == True),
+        ),
+        Index(
+            "idx_interested_matches",
+            "user_id",
+            "match_score",
+            postgresql_where=(Column("interested") == True),
+        ),
+        # Check constraints
+        CheckConstraint(
+            "match_score >= 0 AND match_score <= 100", name="check_match_score_range"
+        ),
+        CheckConstraint(
+            "match_category IN ('safety', 'match', 'reach')",
+            name="check_match_category_values",
+        ),
+    )
+
     def __repr__(self):
         return f"<CollegeMatch(user_id={self.user_id}, college_id={self.college_id}, score={self.match_score})>"
+
+    # ===========================
+    # SIMPLE PROPERTY METHODS (OK in models)
+    # ===========================
+
+    @property
+    def is_high_match(self) -> bool:
+        """Check if this is a high-scoring match"""
+        return self.match_score >= 80
+
+    @property
+    def is_engaged(self) -> bool:
+        """Check if user has engaged with this match"""
+        return self.viewed or self.interested is not None or self.bookmarked
+
+    @property
+    def days_since_match(self) -> Optional[int]:
+        """Get days since match was created"""
+        if not self.match_date:
+            return None
+        from datetime import datetime
+
+        return (datetime.utcnow() - self.match_date.replace(tzinfo=None)).days
+
+    @property
+    def engagement_level(self) -> str:
+        """Get engagement level description"""
+        if self.applied:
+            return "applied"
+        elif self.interested is True:
+            return "interested"
+        elif self.viewed:
+            return "viewed"
+        elif self.bookmarked:
+            return "bookmarked"
+        else:
+            return "none"
+
+    # ===========================
+    # SIMPLE HELPER METHODS (OK in models)
+    # ===========================
+
+    def mark_viewed(self):
+        """Mark this match as viewed"""
+        if not self.viewed:
+            self.viewed = True
+            self.viewed_at = func.now()
+
+    def set_interest(self, interested: bool):
+        """Set interest level"""
+        self.interested = interested
+
+    def add_bookmark(self):
+        """Add to bookmarks"""
+        self.bookmarked = True
+
+    def remove_bookmark(self):
+        """Remove from bookmarks"""
+        self.bookmarked = False
