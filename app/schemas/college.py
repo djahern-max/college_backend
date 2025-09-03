@@ -1,9 +1,10 @@
-# app/schemas/college.py
+# app/schemas/college.py - COMPLETE FILE
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from app.models.college import CollegeType, CollegeSize, AdmissionDifficulty
 from enum import Enum
+from pydantic import field_validator
 
 
 class CollegeTypeEnum(str, Enum):
@@ -52,6 +53,87 @@ class CollegeBase(BaseModel):
     is_tribal_college: bool = False
     is_women_only: bool = False
     is_men_only: bool = False
+
+
+# ==========================================
+# SEARCH AND FILTER SCHEMAS
+# ==========================================
+
+
+class CollegeSearchFilter(BaseModel):
+    """Schema for college search and filtering"""
+
+    # Pagination
+    page: int = Field(1, ge=1)
+    limit: int = Field(20, ge=1, le=100)
+
+    # Basic filters
+    active_only: bool = True
+    verified_only: bool = False
+
+    # Search
+    search_query: Optional[str] = None
+
+    # Location
+    state: Optional[str] = None
+    region: Optional[str] = None
+    campus_setting: Optional[str] = None
+
+    # Institution type
+    college_type: Optional[CollegeTypeEnum] = None
+    college_size: Optional[CollegeSizeEnum] = None
+
+    # Academic filters
+    min_acceptance_rate: Optional[float] = Field(None, ge=0.0, le=1.0)
+    max_acceptance_rate: Optional[float] = Field(None, ge=0.0, le=1.0)
+    admission_difficulty: Optional[AdmissionDifficultyEnum] = None
+
+    # Student profile matching
+    student_gpa: Optional[float] = Field(None, ge=0.0, le=5.0)
+    student_sat_score: Optional[int] = Field(None, ge=400, le=1600)
+    student_act_score: Optional[int] = Field(None, ge=1, le=36)
+    student_major: Optional[str] = None
+    student_state: Optional[str] = None
+
+    # Financial filters
+    max_tuition_in_state: Optional[int] = Field(None, ge=0)
+    max_tuition_out_of_state: Optional[int] = Field(None, ge=0)
+    max_total_cost: Optional[int] = Field(None, ge=0)
+
+    # Program filters
+    required_majors: Optional[List[str]] = None
+    strong_programs_only: Optional[bool] = None
+
+    # Size filters
+    min_enrollment: Optional[int] = Field(None, ge=0)
+    max_enrollment: Optional[int] = Field(None, ge=0)
+
+    # Diversity filters
+    historically_black: Optional[bool] = None
+    hispanic_serving: Optional[bool] = None
+    tribal_college: Optional[bool] = None
+    women_only: Optional[bool] = None
+    men_only: Optional[bool] = None
+
+    # Athletics
+    athletic_division: Optional[str] = None
+
+    # Outcomes
+    min_graduation_rate: Optional[float] = Field(None, ge=0.0, le=1.0)
+    min_retention_rate: Optional[float] = Field(None, ge=0.0, le=1.0)
+
+    # Sorting
+    sort_by: str = "name"
+    sort_order: str = Field("asc", regex="^(asc|desc)$")
+
+    sort_order: str = "asc"
+
+    @field_validator("sort_order")
+    @classmethod
+    def validate_sort_order(cls, v):
+        if v not in ["asc", "desc"]:
+            raise ValueError('sort_order must be either "asc" or "desc"')
+        return v
 
 
 # ==========================================
@@ -245,3 +327,221 @@ class CollegeResponse(CollegeBase):
     # GPA Requirements
     avg_gpa: Optional[float] = None
     min_gpa_recommended: Optional[float] = None
+
+    # Financial Information
+    tuition_in_state: Optional[int] = None
+    tuition_out_of_state: Optional[int] = None
+    room_and_board: Optional[int] = None
+    total_cost_in_state: Optional[int] = None
+    total_cost_out_of_state: Optional[int] = None
+
+    # Financial Aid
+    avg_financial_aid: Optional[int] = None
+    percent_receiving_aid: Optional[float] = None
+    avg_net_price: Optional[int] = None
+
+    # Academic Programs
+    available_majors: Optional[List[str]] = None
+    popular_majors: Optional[List[str]] = None
+    strong_programs: Optional[List[str]] = None
+
+    # Campus Life
+    campus_setting: Optional[str] = None
+    housing_guaranteed: Optional[bool] = None
+    greek_life_available: Optional[bool] = None
+
+    # Athletics
+    athletic_division: Optional[str] = None
+    athletic_conferences: Optional[List[str]] = None
+
+    # Rankings
+    us_news_ranking: Optional[int] = None
+    forbes_ranking: Optional[int] = None
+    other_rankings: Optional[Dict[str, Any]] = None
+
+    # Outcomes
+    graduation_rate_4_year: Optional[float] = None
+    graduation_rate_6_year: Optional[float] = None
+    retention_rate: Optional[float] = None
+    employment_rate: Optional[float] = None
+    avg_starting_salary: Optional[int] = None
+
+    # Diversity
+    percent_white: Optional[float] = None
+    percent_black: Optional[float] = None
+    percent_hispanic: Optional[float] = None
+    percent_asian: Optional[float] = None
+    percent_international: Optional[float] = None
+
+    # Application Information
+    application_deadline: Optional[str] = None
+    early_decision_deadline: Optional[str] = None
+    early_action_deadline: Optional[str] = None
+    application_fee: Optional[int] = None
+    common_app_accepted: Optional[bool] = None
+
+    # Requirements
+    essays_required: Optional[bool] = None
+    letters_of_recommendation: Optional[int] = None
+    interview_required: Optional[bool] = None
+
+    # Status
+    is_active: bool
+    is_verified: bool
+    data_source: Optional[str] = None
+
+    # Timestamps
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ==========================================
+# COLLEGE MATCH SCHEMAS
+# ==========================================
+
+
+class CollegeMatchCreate(BaseModel):
+    """Schema for creating college matches"""
+
+    user_id: int
+    college_id: int
+    match_score: float = Field(..., ge=0.0, le=100.0)
+    match_category: Optional[str] = Field(None, regex="^(safety|match|reach)$")
+    match_reasons: Optional[List[str]] = None
+    concerns: Optional[List[str]] = None
+
+
+class CollegeMatchUpdate(BaseModel):
+    """Schema for updating college match status"""
+
+    viewed: Optional[bool] = None
+    interested: Optional[bool] = None
+    applied: Optional[bool] = None
+    bookmarked: Optional[bool] = None
+    application_status: Optional[str] = None
+    application_deadline: Optional[datetime] = None
+    user_notes: Optional[str] = None
+
+
+class CollegeMatchResponse(BaseModel):
+    """Schema for college match responses"""
+
+    id: int
+    user_id: int
+    college_id: int
+    college: CollegeResponse
+
+    # Match scoring
+    match_score: float
+    match_category: Optional[str] = None
+    match_reasons: Optional[List[str]] = None
+    concerns: Optional[List[str]] = None
+
+    # User interaction
+    viewed: bool
+    interested: Optional[bool] = None
+    applied: bool
+    bookmarked: bool
+
+    # Application status
+    application_status: Optional[str] = None
+    application_deadline: Optional[datetime] = None
+    user_notes: Optional[str] = None
+
+    # Timestamps
+    match_date: datetime
+    viewed_at: Optional[datetime] = None
+    applied_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class CollegeMatchSummary(BaseModel):
+    """Summary of college matches for a user"""
+
+    user_id: int
+    total_matches: int
+    safety_schools: int
+    match_schools: int
+    reach_schools: int
+    viewed_count: int
+    applied_count: int
+    bookmarked_count: int
+    interested_count: int
+    average_match_score: float
+    best_match_score: float
+    matches_this_month: int
+    upcoming_deadlines: int
+
+    # Financial summary
+    avg_cost_in_state: Optional[int] = None
+    avg_cost_out_of_state: Optional[int] = None
+    most_affordable_match: Optional[str] = None
+
+    # Academic summary
+    avg_acceptance_rate: Optional[float] = None
+    most_competitive_match: Optional[str] = None
+
+
+# ==========================================
+# BATCH AND UTILITY SCHEMAS
+# ==========================================
+
+
+class CollegeBatchCreate(BaseModel):
+    """Schema for batch creating colleges"""
+
+    colleges: List[CollegeCreate] = Field(..., min_items=1, max_items=100)
+
+
+class CollegeBatchResponse(BaseModel):
+    """Response for batch college creation"""
+
+    success_count: int
+    error_count: int
+    errors: Optional[List[str]] = None
+    created_ids: Optional[List[int]] = None
+
+
+class CollegeStatistics(BaseModel):
+    """College platform statistics"""
+
+    total_colleges: int
+    active_colleges: int
+    verified_colleges: int
+    colleges_by_type: Dict[str, int]
+    colleges_by_size: Dict[str, int]
+    colleges_by_state: Dict[str, int]
+    avg_acceptance_rate: Optional[float] = None
+    avg_tuition_public: Optional[int] = None
+    avg_tuition_private: Optional[int] = None
+
+
+# ==========================================
+# RECOMMENDATION SCHEMAS
+# ==========================================
+
+
+class CollegeRecommendationRequest(BaseModel):
+    """Request for college recommendations"""
+
+    user_id: Optional[int] = None  # Use current user if not provided
+    limit: int = Field(20, ge=1, le=100)
+    include_safety: bool = True
+    include_match: bool = True
+    include_reach: bool = True
+    force_recalculate: bool = False
+
+
+class CollegeRecommendationResponse(BaseModel):
+    """Response for college recommendations"""
+
+    recommendations: List[CollegeMatchResponse]
+    summary: CollegeMatchSummary
+    total_colleges_analyzed: int
+    recommendation_generated_at: datetime

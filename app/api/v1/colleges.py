@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
+from app.models.college import College
 
 from app.core.database import get_db
 from app.api.deps import get_current_user
@@ -519,27 +520,30 @@ async def recalculate_all_college_matches(
 async def get_filter_options(db: Session = Depends(get_db)):
     """Get available options for college filters"""
     try:
-        college_service = CollegeService(db)
-
         # Get distinct values for various filter fields
-        states = (
-            db.query(College.state).distinct().filter(College.is_active == True).all()
+        states_query = (
+            db.query(College.state).distinct().filter(College.is_active == True)
         )
-        regions = (
-            db.query(College.region).distinct().filter(College.is_active == True).all()
+        states = [s[0] for s in states_query.all() if s[0]]
+
+        regions_query = (
+            db.query(College.region).distinct().filter(College.is_active == True)
         )
-        campus_settings = (
+        regions = [r[0] for r in regions_query.all() if r[0]]
+
+        campus_settings_query = (
             db.query(College.campus_setting)
             .distinct()
             .filter(College.is_active == True)
-            .all()
         )
-        athletic_divisions = (
+        campus_settings = [c[0] for c in campus_settings_query.all() if c[0]]
+
+        athletic_divisions_query = (
             db.query(College.athletic_division)
             .distinct()
             .filter(College.is_active == True)
-            .all()
         )
+        athletic_divisions = [a[0] for a in athletic_divisions_query.all() if a[0]]
 
         return {
             "college_types": [
@@ -556,10 +560,10 @@ async def get_filter_options(db: Session = Depends(get_db)):
                 "minimally_difficult",
                 "noncompetitive",
             ],
-            "states": sorted([s[0] for s in states if s[0]]),
-            "regions": sorted([r[0] for r in regions if r[0]]),
-            "campus_settings": sorted([c[0] for c in campus_settings if c[0]]),
-            "athletic_divisions": sorted([a[0] for a in athletic_divisions if a[0]]),
+            "states": sorted(states),
+            "regions": sorted(regions),
+            "campus_settings": sorted(campus_settings),
+            "athletic_divisions": sorted(athletic_divisions),
             "sort_options": [
                 "name",
                 "acceptance_rate",
@@ -575,13 +579,3 @@ async def get_filter_options(db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get filter options: {str(e)}",
         )
-
-
-@router.get("/health")
-async def college_service_health():
-    """Health check for college service"""
-    return {
-        "service": "college",
-        "status": "healthy",
-        "timestamp": datetime.utcnow(),
-    }
