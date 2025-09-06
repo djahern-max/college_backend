@@ -9,7 +9,7 @@ when the application starts.
 from .user import User
 from .profile import UserProfile
 from .oauth import OAuthAccount, OAuthState
-from .college import College, CollegeFavorite, CollegeSavedSearch
+
 
 # Import other models as they're created:
 # from .scholarship import Scholarship, ScholarshipMatch
@@ -20,8 +20,5 @@ __all__ = [
     "UserProfile",
     "OAuthAccount",
     "OAuthState",
-    "College",
-    "CollegeFavorite",
-    "CollegeSavedSearch",
     # Add other models as they're created
 ]
