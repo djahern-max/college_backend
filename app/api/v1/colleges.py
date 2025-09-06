@@ -31,6 +31,161 @@ router = APIRouter()
 
 
 # ===========================
+# DEBUG ENDPOINTS (Add these first for testing)
+# ===========================
+
+
+@router.get("/debug/{college_id}", response_model=Dict[str, Any])
+async def debug_college_data(college_id: int, db: Session = Depends(get_db)):
+    """
+    Debug endpoint to see ALL raw data for a specific college ID.
+    Shows exactly what's in the database including null fields.
+    """
+    try:
+        from app.models.college import College
+        from sqlalchemy import inspect
+
+        # Get the college record
+        college = db.query(College).filter(College.id == college_id).first()
+
+        if not college:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"College with ID {college_id} not found",
+            )
+
+        # Get all column names from the model
+        mapper = inspect(College)
+        columns = [column.key for column in mapper.columns]
+
+        # Build complete data dictionary with ALL fields
+        college_data = {}
+        for column in columns:
+            value = getattr(college, column, None)
+
+            # Convert special types to serializable format
+            if hasattr(value, "value"):  # Enum values
+                college_data[column] = value.value
+            elif hasattr(value, "isoformat"):  # DateTime objects
+                college_data[column] = value.isoformat()
+            else:
+                college_data[column] = value
+
+        return {
+            "college_id": college_id,
+            "found": True,
+            "data": college_data,
+            "data_summary": {
+                "total_fields": len(college_data),
+                "non_null_fields": len(
+                    [v for v in college_data.values() if v is not None]
+                ),
+                "null_fields": len([v for v in college_data.values() if v is None]),
+            },
+            "financial_data": {
+                "tuition_in_state": college_data.get("tuition_in_state"),
+                "tuition_out_state": college_data.get("tuition_out_state"),
+                "total_cost_in_state": college_data.get("total_cost_in_state"),
+                "total_cost_out_state": college_data.get("total_cost_out_state"),
+                "room_and_board": college_data.get("room_and_board"),
+                "required_fees": college_data.get("required_fees"),
+            },
+            "admissions_data": {
+                "acceptance_rate": college_data.get("acceptance_rate"),
+                "sat_total_25": college_data.get("sat_total_25"),
+                "sat_total_75": college_data.get("sat_total_75"),
+                "act_composite_25": college_data.get("act_composite_25"),
+                "act_composite_75": college_data.get("act_composite_75"),
+            },
+            "basic_info": {
+                "name": college_data.get("name"),
+                "state": college_data.get("state"),
+                "city": college_data.get("city"),
+                "college_type": college_data.get("college_type"),
+                "total_enrollment": college_data.get("total_enrollment"),
+            },
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Debug college data failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Debug failed: {str(e)}",
+        )
+
+
+@router.get("/debug/summary", response_model=Dict[str, Any])
+async def debug_database_summary(db: Session = Depends(get_db)):
+    """
+    Debug endpoint to see overall database state and field coverage.
+    """
+    try:
+        from app.models.college import College
+        from sqlalchemy import func, inspect
+
+        # Get total count
+        total_colleges = db.query(College).count()
+
+        if total_colleges == 0:
+            return {"total_colleges": 0, "message": "No colleges found in database"}
+
+        # Get field coverage for key financial fields
+        financial_fields = [
+            "tuition_in_state",
+            "tuition_out_state",
+            "total_cost_in_state",
+            "total_cost_out_state",
+            "room_and_board",
+            "required_fees",
+        ]
+
+        field_coverage = {}
+        for field in financial_fields:
+            count = (
+                db.query(College).filter(getattr(College, field).isnot(None)).count()
+            )
+            field_coverage[field] = {
+                "count": count,
+                "percentage": round((count / total_colleges) * 100, 2),
+            }
+
+        # Get some sample college IDs
+        sample_colleges = db.query(College.id, College.name).limit(5).all()
+
+        # Check if any colleges have financial data
+        has_any_financial = (
+            db.query(College)
+            .filter(
+                (College.tuition_in_state.isnot(None))
+                | (College.tuition_out_state.isnot(None))
+                | (College.room_and_board.isnot(None))
+            )
+            .count()
+        )
+
+        return {
+            "total_colleges": total_colleges,
+            "has_any_financial_data": has_any_financial,
+            "financial_field_coverage": field_coverage,
+            "sample_college_ids": [
+                {"id": c.id, "name": c.name} for c in sample_colleges
+            ],
+            "test_urls": [
+                f"/api/v1/colleges/debug/{c.id}" for c in sample_colleges[:3]
+            ],
+        }
+
+    except Exception as e:
+        logger.error(f"Debug summary failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Debug summary failed: {str(e)}",
+        )
+
+
+# ===========================
 # COLLEGE SEARCH ENDPOINTS
 # ===========================
 
