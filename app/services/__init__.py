@@ -9,9 +9,11 @@ They act as an abstraction layer between API endpoints and database models.
 from .user import UserService
 from .profile import ProfileService
 from .oauth import OAuthService
+from .college import CollegeService
 
 __all__ = [
     "UserService",
     "ProfileService",
     "OAuthService",
+    "CollegeService",
 ]

@@ -1,3 +1,4 @@
+# app/models/user.py - UPDATED
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -58,7 +59,7 @@ class User(Base):
         cascade="all, delete-orphan",
     )
 
-    # Scholarship relationships
-    scholarship_matches = relationship(
-        "ScholarshipMatch", back_populates="user", cascade="all, delete-orphan"
-    )
+    # TODO: Add this back after ScholarshipMatch model is created
+    # scholarship_matches = relationship(
+    #     "ScholarshipMatch", back_populates="user", cascade="all, delete-orphan"
+    # )
