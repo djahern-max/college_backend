@@ -6,7 +6,7 @@ from app.api.v1 import user, oauth, profiles, scholarships, institution
 from fastapi.routing import APIRoute
 from fastapi.responses import PlainTextResponse
 from app.api.v1.admin import images as admin_images
-from app.api.v1.admin import test_extraction  # NEW - Add this import
+
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -35,10 +35,6 @@ app.include_router(
 )
 app.include_router(
     admin_images.router, prefix="/api/v1/admin/images", tags=["admin-images"]
-)
-# NEW - Add this router
-app.include_router(
-    test_extraction.router, prefix="/api/v1/admin/test-extraction", tags=["admin-test"]
 )
 
 
