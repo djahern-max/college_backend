@@ -16,6 +16,7 @@ import hashlib
 from PIL import Image, ImageOps
 import io
 import math
+from typing import List, Dict, Any
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -47,61 +48,180 @@ class EnhancedImageExtractor:
         self.results = []
         self.failed_urls = []
 
-    def calculate_image_quality_score(self, image_info, image_type):
-        """Calculate a quality score for an image (0-100)"""
-        score = 0
-        width = image_info.get("width", 0)
-        height = image_info.get("height", 0)
-        size_bytes = image_info.get("size_bytes", 0)
+    def calculate_improved_quality_score(
+        self, image_info: Dict[str, Any], school_name: str
+    ) -> float:
+        """
+        Improved quality scoring that properly prioritizes campus imagery over promotional content
+        """
+        score = 0.0
+        width = image_info["width"]
+        height = image_info["height"]
+        url = image_info["url"].lower()
+        image_type = image_info["image_type"]
 
-        # Size quality (40 points max)
-        if width >= 1200:
+        # Base score from dimensions (reduced weight - 0-25 points instead of 0-40)
+        if width >= 1200 and height >= 800:
+            score += 25
+        elif width >= 800 and height >= 600:
             score += 20
-        elif width >= 800:
+        elif width >= 600 and height >= 400:
             score += 15
-        elif width >= 600:
+        elif width >= 400 and height >= 300:
             score += 10
-        elif width >= 400:
+        elif width >= 200 and height >= 150:
             score += 5
 
-        if height >= 600:
-            score += 20
-        elif height >= 400:
-            score += 15
-        elif height >= 300:
-            score += 10
-        elif height >= 200:
+        # Aspect ratio (reduced weight - 0-5 points instead of 0-10)
+        aspect_ratio = width / height if height > 0 else 0
+        if 1.2 <= aspect_ratio <= 2.0:  # Good landscape ratio
             score += 5
+        elif 0.8 <= aspect_ratio <= 1.2:  # Square-ish
+            score += 3
 
-        # Aspect ratio quality (20 points max)
-        if width > 0 and height > 0:
-            ratio = width / height
-            if 1.2 <= ratio <= 2.5:  # Good for cards
-                score += 20
-            elif 1.0 <= ratio <= 3.0:  # Acceptable
-                score += 10
+        # ENHANCED: Campus-specific content analysis (0-40 points - major weight)
+        campus_content_score = 0
 
-        # File size quality (20 points max)
-        if size_bytes > 200000:
-            score += 20  # Large, detailed
-        elif size_bytes > 100000:
-            score += 15  # Good size
-        elif size_bytes > 50000:
-            score += 10  # Acceptable
-        elif size_bytes > 20000:
-            score += 5  # Small but usable
+        # High-value campus keywords (architecture, buildings, aerial views)
+        premium_campus_keywords = [
+            "campus",
+            "aerial",
+            "building",
+            "tower",
+            "clock",
+            "library",
+            "quad",
+            "courtyard",
+            "hall",
+            "center",
+            "dome",
+            "arch",
+            "gate",
+            "plaza",
+            "lawn",
+            "garden",
+            "brick",
+            "stone",
+            "architecture",
+        ]
 
-        # Image type bonus (20 points max)
-        type_bonuses = {
-            "og_image": 20,  # Usually best quality
-            "hero": 15,  # Good campus images
-            "twitter_image": 12,  # Decent quality
-            "logo": 8,  # Useful but not primary
-            "favicon": 3,  # Usually too small
-        }
-        score += type_bonuses.get(image_type, 0)
+        # Medium-value institutional keywords
+        institutional_keywords = [
+            "university",
+            "college",
+            "school",
+            "academic",
+            "education",
+            "student",
+            "graduation",
+            "commencement",
+            "ceremony",
+        ]
 
-        return min(score, 100)  # Cap at 100
+        # Count premium campus keywords (3 points each, max 30)
+        premium_matches = sum(
+            3 for keyword in premium_campus_keywords if keyword in url
+        )
+        campus_content_score += min(30, premium_matches)
+
+        # Count institutional keywords (1 point each, max 10)
+        institutional_matches = sum(
+            1 for keyword in institutional_keywords if keyword in url
+        )
+        campus_content_score += min(10, institutional_matches)
+
+        score += campus_content_score
+
+        # Image type bonuses (adjusted to favor campus-specific types)
+        if image_type == "og_image":
+            score += 20  # OG images often show campus
+        elif image_type == "twitter_image":
+            score += 15  # Twitter images often show campus
+        elif image_type == "hero":
+            score += 10  # Hero images vary in quality
+        elif image_type == "logo":
+            score -= 10  # Penalize logos heavily (not campus imagery)
+        elif image_type == "favicon":
+            score -= 20  # Heavy penalty for favicons
+
+        # ENHANCED: Detect and penalize promotional/people photos (0 to -25 points)
+        people_photo_indicators = [
+            "headshot",
+            "portrait",
+            "people",
+            "person",
+            "face",
+            "smile",
+            "professional",
+            "team",
+            "staff",
+            "faculty",
+            "student-life",
+            "interview",
+            "meeting",
+            "conference",
+            "graduation-photo",
+        ]
+
+        people_penalty = 0
+        for indicator in people_photo_indicators:
+            if indicator in url:
+                people_penalty += 5
+
+        # Apply penalty (max -25 points)
+        score -= min(25, people_penalty)
+
+        # ENHANCED: Reward actual campus visual elements based on typical campus image characteristics
+        campus_visual_bonus = 0
+
+        # Large images are more likely to be campus shots than headshots
+        if width >= 1200 and height >= 600:
+            campus_visual_bonus += 10
+
+        # Landscape orientation favors campus shots over portrait headshots
+        if aspect_ratio >= 1.5:
+            campus_visual_bonus += 5
+
+        score += campus_visual_bonus
+
+        # File size considerations (reduced weight - 0-5 points instead of 0-10)
+        size_mb = image_info["size_bytes"] / (1024 * 1024)
+        if 0.5 <= size_mb <= 8.0:
+            score += 5
+        elif 0.1 <= size_mb <= 15.0:
+            score += 2
+
+        # ENHANCED: Penalties for non-campus content
+        penalties = [
+            (width < 300 or height < 200, -15),  # Too small for campus shots
+            ("favicon" in url or "icon" in url, -20),  # Likely favicon
+            ("logo" in url and image_type != "logo", -15),  # Logo in non-logo context
+            (size_mb > 15, -10),  # Too large
+            (aspect_ratio > 3.0 or aspect_ratio < 0.3, -10),  # Weird aspect ratios
+            (aspect_ratio < 0.8, -10),  # Portrait orientation (likely people photos)
+        ]
+
+        for condition, penalty in penalties:
+            if condition:
+                score += penalty
+
+        # ENHANCED: Bonus for established universities (based on school name recognition)
+        prestigious_indicators = [
+            "university",
+            "state university",
+            "tech",
+            "institute of technology",
+            "college",
+            "community college",
+        ]
+
+        school_name_lower = school_name.lower()
+        for indicator in prestigious_indicators:
+            if indicator in school_name_lower:
+                score += 5  # Small bonus for established institutions
+                break
+
+        return max(0, min(100, score))
 
     def load_university_data(self, csv_path):
         """Load university data from processed CSV"""
