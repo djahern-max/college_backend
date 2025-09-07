@@ -438,33 +438,76 @@ class EnhancedImageExtractor:
     def standardize_image(
         self, image_data: bytes, school_name: str, image_type: str, quality_score: int
     ) -> Tuple[Optional[bytes], Optional[str]]:
-        """Standardize image to consistent dimensions"""
+        """
+        Improved image standardization with different handling for logos vs campus images
+        """
         try:
             img = Image.open(io.BytesIO(image_data))
 
-            # Convert to RGB if necessary
-            if img.mode in ("RGBA", "LA", "P"):
+            # Convert to RGB
+            if img.mode == "RGBA":
                 background = Image.new("RGB", img.size, (255, 255, 255))
-                if img.mode == "P":
-                    img = img.convert("RGBA")
-                background.paste(
-                    img, mask=img.split()[-1] if img.mode == "RGBA" else None
-                )
+                background.paste(img, mask=img.split()[-1])
                 img = background
+            elif img.mode != "RGB":
+                img = img.convert("RGB")
 
-            # Resize to target dimensions
-            img = img.resize(
-                (self.target_width, self.target_height), Image.Resampling.LANCZOS
-            )
+            original_width, original_height = img.size
+
+            # Different handling for logos vs campus images
+            if image_type == "logo":
+                # For logos: use square format with padding (no cropping)
+                target_size = 400
+
+                # Resize maintaining aspect ratio
+                img.thumbnail((target_size, target_size), Image.LANCZOS)
+
+                # Create square canvas and center the logo
+                canvas = Image.new("RGB", (target_size, target_size), (255, 255, 255))
+                x = (target_size - img.width) // 2
+                y = (target_size - img.height) // 2
+                canvas.paste(img, (x, y))
+                img = canvas
+
+                filename_suffix = "square"
+
+            else:
+                # For campus images: use 16:9 with smart cropping
+                target_width = 400
+                target_height = 225
+                target_ratio = target_width / target_height
+                current_ratio = original_width / original_height
+
+                if abs(current_ratio - target_ratio) > 0.1:
+                    if current_ratio > target_ratio:
+                        # Crop sides
+                        new_width = int(original_height * target_ratio)
+                        left = (original_width - new_width) // 2
+                        img = img.crop((left, 0, left + new_width, original_height))
+                    else:
+                        # Crop top/bottom, preserve ground for campus images
+                        new_height = int(original_width / target_ratio)
+                        top_crop_ratio = (
+                            0.3
+                            if image_type in ["og_image", "hero", "twitter_image"]
+                            else 0.5
+                        )
+                        top = int((original_height - new_height) * top_crop_ratio)
+                        img = img.crop((0, top, original_width, top + new_height))
+
+                img = img.resize((target_width, target_height), Image.LANCZOS)
+                filename_suffix = "16x9"
 
             # Create filename
             safe_name = re.sub(r"[^\w\s-]", "", school_name)
             safe_name = re.sub(r"[-\s]+", "_", safe_name)[:50]
-            filename = f"{safe_name}_q{quality_score}_{image_type}.jpg"
+            filename = (
+                f"{safe_name}_q{quality_score}_{image_type}_{filename_suffix}.jpg"
+            )
 
             # Save as JPEG
             output = io.BytesIO()
-            img.save(output, format="JPEG", quality=85, optimize=True)
+            img.save(output, format="JPEG", quality=90, optimize=True)
 
             return output.getvalue(), filename
 
