@@ -2,6 +2,7 @@
 from pydantic import BaseModel, Field, validator
 from typing import Optional
 from enum import Enum
+from datetime import datetime
 
 
 class ControlType(str, Enum):
@@ -34,6 +35,17 @@ class USRegion(str, Enum):
     WEST_SOUTH_CENTRAL = "west_south_central"
     MOUNTAIN = "mountain"
     PACIFIC = "pacific"
+
+
+class ImageExtractionStatus(str, Enum):
+    """Status of image extraction process"""
+
+    PENDING = "pending"
+    PROCESSING = "processing"
+    SUCCESS = "success"
+    FAILED = "failed"
+    NEEDS_REVIEW = "needs_review"
+    FALLBACK_APPLIED = "fallback_applied"
 
 
 class InstitutionBase(BaseModel):
@@ -130,6 +142,19 @@ class InstitutionUpdate(BaseModel):
     president_title: Optional[str] = Field(None, max_length=100)
     control_type: Optional[ControlType] = None
     size_category: Optional[SizeCategory] = None
+    # Image fields for updates
+    primary_image_url: Optional[str] = Field(
+        None, max_length=500, description="CDN URL to primary image"
+    )
+    primary_image_quality_score: Optional[int] = Field(
+        None, ge=0, le=100, description="Image quality score 0-100"
+    )
+    logo_image_url: Optional[str] = Field(
+        None, max_length=500, description="CDN URL to logo image"
+    )
+    image_extraction_status: Optional[ImageExtractionStatus] = Field(
+        None, description="Image extraction status"
+    )
 
     @validator("state")
     def validate_state_code(cls, v):
@@ -156,11 +181,38 @@ class InstitutionResponse(InstitutionBase):
     id: int = Field(..., description="Database ID")
     ipeds_id: int = Field(..., description="IPEDS UNITID")
 
+    # Image fields
+    primary_image_url: Optional[str] = Field(
+        None, description="CDN URL to standardized 400x300px image"
+    )
+    primary_image_quality_score: Optional[int] = Field(
+        None, description="Image quality score 0-100"
+    )
+    logo_image_url: Optional[str] = Field(None, description="CDN URL to school logo")
+    image_extraction_status: Optional[ImageExtractionStatus] = Field(
+        None, description="Image extraction status"
+    )
+    image_extraction_date: Optional[datetime] = Field(
+        None, description="When images were last processed"
+    )
+
     # Computed properties for response
     full_address: Optional[str] = Field(None, description="Formatted full address")
     display_name: str = Field(..., description="Institution name with location")
     is_public: bool = Field(..., description="Whether institution is public")
     is_private: bool = Field(..., description="Whether institution is private")
+    display_image_url: Optional[str] = Field(
+        None, description="Best available image URL for display"
+    )
+    has_high_quality_image: bool = Field(
+        False, description="Whether institution has high-quality image (80+ score)"
+    )
+    has_good_image: bool = Field(
+        False, description="Whether institution has good image (60+ score)"
+    )
+    image_needs_attention: bool = Field(
+        False, description="Whether image needs manual review"
+    )
 
     class Config:
         from_attributes = True
@@ -179,10 +231,19 @@ class InstitutionResponse(InstitutionBase):
                 "president_title": "President",
                 "control_type": "public",
                 "size_category": "large",
+                "primary_image_url": "https://magicscholar-images.nyc3.digitaloceanspaces.com/primary/unh_campus.jpg",
+                "primary_image_quality_score": 85,
+                "logo_image_url": "https://magicscholar-images.nyc3.digitaloceanspaces.com/logos/unh_logo.jpg",
+                "image_extraction_status": "success",
+                "image_extraction_date": "2024-01-15T10:30:00",
                 "full_address": "105 Main Street, Durham, NH, 03824",
                 "display_name": "University of New Hampshire (Durham, NH)",
                 "is_public": True,
                 "is_private": False,
+                "display_image_url": "https://magicscholar-images.nyc3.digitaloceanspaces.com/primary/unh_campus.jpg",
+                "has_high_quality_image": True,
+                "has_good_image": True,
+                "image_needs_attention": False,
             }
         }
 
@@ -223,6 +284,16 @@ class InstitutionSearch(BaseModel):
     size_category: Optional[SizeCategory] = Field(
         None, description="Filter by size category"
     )
+    # Image-based filters
+    min_image_quality: Optional[int] = Field(
+        None, ge=0, le=100, description="Minimum image quality score"
+    )
+    has_image: Optional[bool] = Field(
+        None, description="Filter by whether institution has an image"
+    )
+    image_status: Optional[ImageExtractionStatus] = Field(
+        None, description="Filter by image extraction status"
+    )
 
     class Config:
         json_schema_extra = {
@@ -232,5 +303,65 @@ class InstitutionSearch(BaseModel):
                 "region": "new_england",
                 "control_type": "public",
                 "size_category": "large",
+                "min_image_quality": 60,
+                "has_image": True,
+                "image_status": "success",
+            }
+        }
+
+
+class ImageUpdateRequest(BaseModel):
+    """Schema for updating institution image information"""
+
+    primary_image_url: str = Field(
+        ..., max_length=500, description="CDN URL to primary image"
+    )
+    primary_image_quality_score: int = Field(
+        ..., ge=0, le=100, description="Image quality score 0-100"
+    )
+    logo_image_url: Optional[str] = Field(
+        None, max_length=500, description="CDN URL to logo image"
+    )
+    image_extraction_status: ImageExtractionStatus = Field(
+        ImageExtractionStatus.SUCCESS, description="Image extraction status"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "primary_image_url": "https://magicscholar-images.nyc3.digitaloceanspaces.com/primary/school_image.jpg",
+                "primary_image_quality_score": 85,
+                "logo_image_url": "https://magicscholar-images.nyc3.digitaloceanspaces.com/logos/school_logo.jpg",
+                "image_extraction_status": "success",
+            }
+        }
+
+
+class InstitutionImageStats(BaseModel):
+    """Schema for institution image statistics"""
+
+    total_institutions: int
+    with_images: int
+    with_high_quality_images: int  # 80+ score
+    with_good_images: int  # 60+ score
+    needs_review: int
+    by_status: dict[str, int]
+    avg_quality_score: Optional[float]
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "total_institutions": 6163,
+                "with_images": 4200,
+                "with_high_quality_images": 1500,
+                "with_good_images": 3200,
+                "needs_review": 450,
+                "by_status": {
+                    "success": 4200,
+                    "failed": 300,
+                    "needs_review": 450,
+                    "pending": 1213,
+                },
+                "avg_quality_score": 68.5,
             }
         }

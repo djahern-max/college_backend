@@ -1,15 +1,18 @@
 # app/services/institution.py
 from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_, and_
+from sqlalchemy import func, or_, and_, desc
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 import logging
+from datetime import datetime
 
-from app.models.institution import Institution
+from app.models.institution import Institution, ImageExtractionStatus
 from app.schemas.institution import (
     InstitutionCreate,
     InstitutionUpdate,
     InstitutionSearch,
+    ImageUpdateRequest,
+    InstitutionImageStats,
     ControlType,
     SizeCategory,
     USRegion,
@@ -97,6 +100,16 @@ class InstitutionService:
             for field, value in update_dict.items():
                 setattr(institution, field, value)
 
+            # If image fields are being updated, update the extraction date
+            image_fields = {
+                "primary_image_url",
+                "primary_image_quality_score",
+                "logo_image_url",
+                "image_extraction_status",
+            }
+            if any(field in update_dict for field in image_fields):
+                institution.image_extraction_date = datetime.utcnow()
+
             self.db.commit()
             self.db.refresh(institution)
 
@@ -109,6 +122,38 @@ class InstitutionService:
             self.db.rollback()
             logger.error(
                 f"Database error updating institution {institution_id}: {str(e)}"
+            )
+            raise Exception(f"Database error: {str(e)}")
+
+    def update_institution_images(
+        self, institution_id: int, image_data: ImageUpdateRequest
+    ) -> Optional[Institution]:
+        """Update institution image information"""
+        try:
+            institution = self.get_institution_by_id(institution_id)
+            if not institution:
+                return None
+
+            # Update image info using the model method
+            institution.update_image_info(
+                image_url=image_data.primary_image_url,
+                quality_score=image_data.primary_image_quality_score,
+                logo_url=image_data.logo_image_url,
+                status=image_data.image_extraction_status,
+            )
+
+            self.db.commit()
+            self.db.refresh(institution)
+
+            logger.info(
+                f"Successfully updated images for institution: {institution.name} (Score: {image_data.primary_image_quality_score})"
+            )
+            return institution
+
+        except SQLAlchemyError as e:
+            self.db.rollback()
+            logger.error(
+                f"Database error updating institution images {institution_id}: {str(e)}"
             )
             raise Exception(f"Database error: {str(e)}")
 
@@ -162,6 +207,30 @@ class InstitutionService:
                     Institution.size_category == search_params.size_category
                 )
 
+            # Image-based filters
+            if search_params.min_image_quality is not None:
+                query = query.filter(
+                    Institution.primary_image_quality_score
+                    >= search_params.min_image_quality
+                )
+
+            if search_params.has_image is not None:
+                if search_params.has_image:
+                    query = query.filter(Institution.primary_image_url.isnot(None))
+                else:
+                    query = query.filter(Institution.primary_image_url.is_(None))
+
+            if search_params.image_status:
+                query = query.filter(
+                    Institution.image_extraction_status == search_params.image_status
+                )
+
+            # Default ordering by image quality (best first), then by name
+            query = query.order_by(
+                desc(Institution.primary_image_quality_score.nullslast()),
+                Institution.name,
+            )
+
             # Get total count before pagination
             total = query.count()
 
@@ -175,13 +244,40 @@ class InstitutionService:
             logger.error(f"Database error searching institutions: {str(e)}")
             raise Exception(f"Database error: {str(e)}")
 
+    def get_institutions_by_image_quality(
+        self, min_score: int = 60, limit: int = 50
+    ) -> List[Institution]:
+        """Get institutions ordered by image quality for featured display"""
+        try:
+            return Institution.get_by_image_quality(
+                self.db, limit=limit, min_score=min_score
+            )
+        except SQLAlchemyError as e:
+            logger.error(
+                f"Database error getting institutions by image quality: {str(e)}"
+            )
+            raise Exception(f"Database error: {str(e)}")
+
+    def get_institutions_needing_image_review(self) -> List[Institution]:
+        """Get institutions that need manual image review"""
+        try:
+            return Institution.get_needing_image_review(self.db)
+        except SQLAlchemyError as e:
+            logger.error(
+                f"Database error getting institutions needing review: {str(e)}"
+            )
+            raise Exception(f"Database error: {str(e)}")
+
     def get_institutions_by_state(self, state: str) -> List[Institution]:
         """Get all institutions in a specific state"""
         try:
             return (
                 self.db.query(Institution)
                 .filter(Institution.state == state.upper())
-                .order_by(Institution.name)
+                .order_by(
+                    desc(Institution.primary_image_quality_score.nullslast()),
+                    Institution.name,
+                )
                 .all()
             )
         except SQLAlchemyError as e:
@@ -196,7 +292,11 @@ class InstitutionService:
             return (
                 self.db.query(Institution)
                 .filter(Institution.region == region)
-                .order_by(Institution.state, Institution.name)
+                .order_by(
+                    desc(Institution.primary_image_quality_score.nullslast()),
+                    Institution.state,
+                    Institution.name,
+                )
                 .all()
             )
         except SQLAlchemyError as e:
@@ -211,7 +311,11 @@ class InstitutionService:
             return (
                 self.db.query(Institution)
                 .filter(Institution.control_type == ControlType.PUBLIC)
-                .order_by(Institution.state, Institution.name)
+                .order_by(
+                    desc(Institution.primary_image_quality_score.nullslast()),
+                    Institution.state,
+                    Institution.name,
+                )
                 .all()
             )
         except SQLAlchemyError as e:
@@ -229,11 +333,87 @@ class InstitutionService:
                         Institution.control_type == ControlType.PRIVATE_FOR_PROFIT,
                     )
                 )
-                .order_by(Institution.state, Institution.name)
+                .order_by(
+                    desc(Institution.primary_image_quality_score.nullslast()),
+                    Institution.state,
+                    Institution.name,
+                )
                 .all()
             )
         except SQLAlchemyError as e:
             logger.error(f"Database error getting private institutions: {str(e)}")
+            raise Exception(f"Database error: {str(e)}")
+
+    def get_image_stats(self) -> InstitutionImageStats:
+        """Get institution image statistics"""
+        try:
+            total = self.db.query(Institution).count()
+
+            # Count institutions with images
+            with_images = (
+                self.db.query(Institution)
+                .filter(Institution.primary_image_url.isnot(None))
+                .count()
+            )
+
+            # Count by quality thresholds
+            with_high_quality = (
+                self.db.query(Institution)
+                .filter(Institution.primary_image_quality_score >= 80)
+                .count()
+            )
+
+            with_good_quality = (
+                self.db.query(Institution)
+                .filter(Institution.primary_image_quality_score >= 60)
+                .count()
+            )
+
+            # Count needing review
+            needs_review = (
+                self.db.query(Institution)
+                .filter(
+                    or_(
+                        Institution.image_extraction_status
+                        == ImageExtractionStatus.FAILED,
+                        Institution.image_extraction_status
+                        == ImageExtractionStatus.NEEDS_REVIEW,
+                        Institution.primary_image_quality_score < 40,
+                    )
+                )
+                .count()
+            )
+
+            # Count by status
+            status_stats = (
+                self.db.query(
+                    Institution.image_extraction_status, func.count(Institution.id)
+                )
+                .group_by(Institution.image_extraction_status)
+                .all()
+            )
+
+            # Average quality score
+            avg_quality = (
+                self.db.query(func.avg(Institution.primary_image_quality_score))
+                .filter(Institution.primary_image_quality_score.isnot(None))
+                .scalar()
+            )
+
+            return InstitutionImageStats(
+                total_institutions=total,
+                with_images=with_images,
+                with_high_quality_images=with_high_quality,
+                with_good_images=with_good_quality,
+                needs_review=needs_review,
+                by_status={
+                    str(status): count for status, count in status_stats if status
+                },
+                avg_quality_score=float(avg_quality) if avg_quality else None,
+            )
+
+        except SQLAlchemyError as e:
+            logger.error(f"Database error getting image stats: {str(e)}")
             raise Exception(f"Database error: {str(e)}")
 
     def get_stats(self) -> dict:
@@ -297,3 +477,101 @@ class InstitutionService:
 
         logger.info(f"Bulk create completed: {successful} successful, {failed} failed")
         return successful, failed, errors
+
+    def bulk_update_institution_images(
+        self, image_updates: List[Tuple[int, ImageUpdateRequest]]
+    ) -> Tuple[int, int, List[str]]:
+        """
+        Bulk update institution images from a list of (ipeds_id, image_data) tuples
+        Returns: (successful_count, failed_count, error_messages)
+        """
+        successful = 0
+        failed = 0
+        errors = []
+
+        for i, (ipeds_id, image_data) in enumerate(image_updates):
+            try:
+                institution = self.get_institution_by_ipeds_id(ipeds_id)
+                if not institution:
+                    failed += 1
+                    errors.append(
+                        f"Update {i+1}: Institution with IPEDS ID {ipeds_id} not found"
+                    )
+                    continue
+
+                self.update_institution_images(institution.id, image_data)
+                successful += 1
+
+            except Exception as e:
+                failed += 1
+                errors.append(f"Update {i+1} (IPEDS ID {ipeds_id}): {str(e)}")
+                logger.error(
+                    f"Failed to update images for IPEDS ID {ipeds_id}: {str(e)}"
+                )
+
+        logger.info(
+            f"Bulk image update completed: {successful} successful, {failed} failed"
+        )
+        return successful, failed, errors
+
+    def get_featured_institutions(self, limit: int = 20) -> List[Institution]:
+        """Get featured institutions with the best images for homepage display"""
+        try:
+            return (
+                self.db.query(Institution)
+                .filter(Institution.primary_image_quality_score >= 70)
+                .filter(Institution.primary_image_url.isnot(None))
+                .order_by(desc(Institution.primary_image_quality_score))
+                .limit(limit)
+                .all()
+            )
+        except SQLAlchemyError as e:
+            logger.error(f"Database error getting featured institutions: {str(e)}")
+            raise Exception(f"Database error: {str(e)}")
+
+    def mark_institution_for_image_review(
+        self, institution_id: int, reason: str = None
+    ) -> bool:
+        """Mark an institution for manual image review"""
+        try:
+            institution = self.get_institution_by_id(institution_id)
+            if not institution:
+                return False
+
+            institution.image_extraction_status = ImageExtractionStatus.NEEDS_REVIEW
+            institution.image_extraction_date = datetime.utcnow()
+
+            self.db.commit()
+
+            logger.info(
+                f"Marked institution {institution.name} for image review. Reason: {reason}"
+            )
+            return True
+
+        except SQLAlchemyError as e:
+            self.db.rollback()
+            logger.error(f"Database error marking institution for review: {str(e)}")
+            raise Exception(f"Database error: {str(e)}")
+
+    def reset_image_extraction_status(
+        self, status_to_reset: ImageExtractionStatus = ImageExtractionStatus.FAILED
+    ) -> int:
+        """Reset image extraction status for institutions (useful for re-processing)"""
+        try:
+            count = (
+                self.db.query(Institution)
+                .filter(Institution.image_extraction_status == status_to_reset)
+                .update(
+                    {Institution.image_extraction_status: ImageExtractionStatus.PENDING}
+                )
+            )
+
+            self.db.commit()
+
+            logger.info(f"Reset {count} institutions from {status_to_reset} to PENDING")
+            return count
+
+        except SQLAlchemyError as e:
+            self.db.rollback()
+            logger.error(f"Database error resetting image status: {str(e)}")
+            raise Exception(f"Database error: {str(e)}")
