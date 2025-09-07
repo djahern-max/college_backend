@@ -50,7 +50,7 @@ class InstitutionBase(BaseModel):
     website: Optional[str] = Field(
         None, max_length=500, description="Institution website"
     )
-    phone: Optional[float] = Field(None, description="Phone number")
+    phone: Optional[str] = Field(None, description="Phone number")
     president_name: Optional[str] = Field(
         None, max_length=255, description="President/CEO name"
     )
@@ -125,7 +125,7 @@ class InstitutionUpdate(BaseModel):
     zip_code: Optional[str] = Field(None, max_length=10)
     region: Optional[USRegion] = None
     website: Optional[str] = Field(None, max_length=500)
-    phone: Optional[float] = None
+    phone: Optional[str] = None
     president_name: Optional[str] = Field(None, max_length=255)
     president_title: Optional[str] = Field(None, max_length=100)
     control_type: Optional[ControlType] = None

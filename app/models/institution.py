@@ -77,7 +77,7 @@ class Institution(Base):
     # CONTACT INFORMATION
     # ===========================
     website = Column(String(500), nullable=True)
-    phone = Column(Float, nullable=True)  # Using Float to match your CSV structure
+    phone = Column(String(20), nullable=True)
 
     # ===========================
     # LEADERSHIP

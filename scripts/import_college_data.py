@@ -114,7 +114,7 @@ class InstitutionDataImporter:
                 "zip_code": self._clean_string(row.get("zip_code")),
                 "region": region,
                 "website": self._clean_website(row.get("website")),
-                "phone": self._get_float(row.get("phone")),
+                "phone": self._clean_phone(row.get("phone")),
                 "president_name": self._clean_string(row.get("president_name")),
                 "president_title": self._clean_string(row.get("president_title")),
                 "control_type": control_type,
@@ -237,13 +237,27 @@ class InstitutionDataImporter:
 
         return website
 
-    def _get_float(self, value) -> Optional[float]:
-        """Convert value to float"""
+    def _clean_phone(self, value) -> Optional[str]:
+        """Clean and format phone number"""
         if pd.isna(value):
             return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
+
+        import re
+
+        # Convert to string and remove non-digits
+        phone = re.sub(r"\D", "", str(value))
+
+        # Handle trailing zero from float conversion (e.g., "70796563130" -> "7079656313")
+        if len(phone) == 11 and phone.endswith("0") and not phone.startswith("1"):
+            phone = phone[:-1]  # Remove the trailing zero
+
+        # Handle common phone number lengths
+        if len(phone) == 10:
+            return f"({phone[:3]}) {phone[3:6]}-{phone[6:]}"
+        elif len(phone) == 11 and phone[0] == "1":
+            return f"({phone[1:4]}) {phone[4:7]}-{phone[7:]}"
+        else:
+            # If it's not a valid US phone format, return None
             return None
 
 
