@@ -1,4 +1,4 @@
-# app/services/image_extractor.py - Simplified version
+# app/services/image_extractor.py - Complete improved version
 """
 Complete University Image Extraction Service for MagicScholar
 Integrates web scraping, image processing, and Digital Ocean Spaces upload
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class DigitalOceanSpacesUploader:
-    """Handles uploads to Digital Ocean Spaces - simplified version"""
+    """Handles uploads to Digital Ocean Spaces"""
 
     def __init__(self):
         self.spaces_client = boto3.client(
@@ -130,60 +130,165 @@ class MagicScholarImageExtractor:
     def calculate_image_quality_score(
         self, image_info: Dict[str, Any], image_type: str
     ) -> int:
-        """Calculate a quality score for an image (0-100)"""
+        """Calculate an improved quality score for an image (0-100) that prioritizes campus imagery"""
         score = 0
         width = image_info.get("width", 0)
         height = image_info.get("height", 0)
         size_bytes = image_info.get("size_bytes", 0)
+        url = image_info.get("url", "").lower()
 
-        # Size quality (40 points max)
+        # Size quality (30 points max - reduced from 40)
         if width >= 1200:
-            score += 20
-        elif width >= 800:
             score += 15
+        elif width >= 800:
+            score += 12
         elif width >= 600:
-            score += 10
+            score += 8
         elif width >= 400:
-            score += 5
+            score += 4
 
         if height >= 600:
-            score += 20
-        elif height >= 400:
             score += 15
+        elif height >= 400:
+            score += 12
         elif height >= 300:
-            score += 10
+            score += 8
         elif height >= 200:
-            score += 5
+            score += 4
 
-        # Aspect ratio quality (20 points max)
+        # Aspect ratio quality (15 points max - reduced from 20)
         if width > 0 and height > 0:
             ratio = width / height
             if 1.2 <= ratio <= 2.5:  # Good for cards
-                score += 20
+                score += 15
             elif 1.0 <= ratio <= 3.0:  # Acceptable
-                score += 10
+                score += 8
 
-        # File size quality (20 points max)
+        # File size quality (15 points max - reduced from 20)
         if size_bytes > 200000:
-            score += 20  # Large, detailed
+            score += 15  # Large, detailed
         elif size_bytes > 100000:
-            score += 15  # Good size
+            score += 12  # Good size
         elif size_bytes > 50000:
-            score += 10  # Acceptable
+            score += 8  # Acceptable
         elif size_bytes > 20000:
-            score += 5  # Small but usable
+            score += 4  # Small but usable
 
-        # Image type bonus (20 points max)
-        type_bonuses = {
-            "og_image": 20,  # Usually best quality
-            "hero": 15,  # Good campus images
-            "twitter_image": 12,  # Decent quality
-            "logo": 8,  # Useful but not primary
-            "favicon": 3,  # Usually too small
+        # Image type and content scoring (40 points max - increased from 20)
+        content_bonuses = {
+            "og_image": 25,  # Usually best quality and most representative
+            "hero": 20,  # Good campus images
+            "twitter_image": 15,  # Decent quality
+            "logo": 5,  # Functional but not engaging - reduced from 8
+            "favicon": 2,  # Usually too small - reduced from 3
         }
-        score += type_bonuses.get(image_type, 0)
+        score += content_bonuses.get(image_type, 0)
 
-        return min(score, 100)  # Cap at 100
+        # Content analysis bonuses/penalties (new - up to +/-15 points)
+        content_score = self._analyze_image_content(url, image_type)
+        score += content_score
+
+        return min(max(score, 0), 100)  # Cap between 0-100
+
+    def _analyze_image_content(self, url: str, image_type: str) -> int:
+        """Analyze image URL and type for content appropriateness"""
+        content_score = 0
+        url_lower = url.lower()
+
+        # Positive indicators for campus/institutional imagery (+5 to +15 points)
+        campus_keywords = [
+            "campus",
+            "building",
+            "hall",
+            "library",
+            "quad",
+            "courtyard",
+            "entrance",
+            "facility",
+            "center",
+            "tower",
+            "arch",
+            "gate",
+            "aerial",
+            "exterior",
+            "architecture",
+            "grounds",
+            "plaza",
+        ]
+
+        for keyword in campus_keywords:
+            if keyword in url_lower:
+                content_score += 8
+                break  # Don't double-count
+
+        # Positive indicators for academic imagery (+3 to +8 points)
+        academic_keywords = [
+            "student",
+            "graduation",
+            "classroom",
+            "lab",
+            "research",
+            "study",
+            "academic",
+            "learning",
+            "education",
+        ]
+
+        for keyword in academic_keywords:
+            if keyword in url_lower:
+                content_score += 5
+                break
+
+        # Negative indicators for promotional/inappropriate content (-5 to -20 points)
+        promotional_keywords = [
+            "headshot",
+            "portrait",
+            "profile",
+            "staff",
+            "faculty-photo",
+            "testimonial",
+            "review",
+            "video-thumb",
+            "play-button",
+            "zoom",
+            "webinar",
+            "meeting",
+            "interview",
+            "tv",
+            "news",
+        ]
+
+        for keyword in promotional_keywords:
+            if keyword in url_lower:
+                content_score -= 15
+                break
+
+        # Logo-specific penalties for pure text/logo images
+        if image_type == "logo":
+            logo_penalties = ["logo-only", "text-logo", "wordmark", "brand", "identity"]
+            for penalty in logo_penalties:
+                if penalty in url_lower:
+                    content_score -= 10
+                    break
+
+            # But give some points back if it's a logo with campus elements
+            if any(word in url_lower for word in ["campus", "seal", "crest", "emblem"]):
+                content_score += 5
+
+        # Favicon penalties - usually too small and not representative
+        if image_type == "favicon":
+            content_score -= 8  # Stronger penalty for favicons
+
+        # File format preferences
+        if url_lower.endswith((".jpg", ".jpeg")):
+            content_score += 2  # Slightly prefer photos over graphics
+        elif url_lower.endswith(".png"):
+            if image_type not in ["logo", "favicon"]:
+                content_score -= (
+                    2  # PNG often indicates graphics/logos for non-logo types
+                )
+
+        return max(min(content_score, 15), -20)  # Cap between -20 and +15
 
     def clean_url(self, url: str) -> Optional[str]:
         """Clean and validate URL"""
@@ -318,7 +423,7 @@ class MagicScholarImageExtractor:
             return None
 
     def extract_website_images(self, url: str, school_name: str) -> Dict[str, Any]:
-        """Extract all possible images from a website"""
+        """Enhanced image extraction with better campus image detection"""
         try:
             response = self.session.get(url, timeout=15)
             response.raise_for_status()
@@ -346,37 +451,48 @@ class MagicScholarImageExtractor:
                 if processed:
                     images["twitter_image"] = processed
 
-            # Look for hero/banner images
+            # Enhanced hero/banner image detection with campus-specific selectors
             hero_selectors = [
+                # Campus-specific selectors (higher priority)
+                'img[alt*="campus" i]',
+                'img[alt*="university" i]',
+                'img[alt*="college" i]',
+                'img[src*="campus" i]',
+                'img[src*="building" i]',
+                'img[src*="aerial" i]',
+                # General hero selectors
                 ".hero img",
                 ".banner img",
                 ".hero-image img",
                 ".main-banner img",
-                'img[alt*="campus" i]',
-                'img[alt*="university" i]',
                 'img[src*="hero" i]',
                 'img[src*="banner" i]',
                 'img[class*="hero" i]',
                 'img[class*="banner" i]',
+                # Additional campus imagery selectors
+                ".campus-image img",
+                ".facility-image img",
+                'img[class*="campus" i]',
+                'img[class*="building" i]',
             ]
 
             for selector in hero_selectors:
                 hero_imgs = soup.select(selector)
-                for hero_img in hero_imgs[:3]:  # Check first 3 matches
+                for hero_img in hero_imgs[:2]:  # Check first 2 matches per selector
                     if hero_img.get("src"):
                         hero_url = urljoin(url, hero_img.get("src"))
                         processed = self.download_and_process_image(
                             hero_url, school_name, "hero"
                         )
                         if (
-                            processed and processed["quality_score"] > 40
-                        ):  # Only good hero images
+                            processed and processed["quality_score"] > 35
+                        ):  # Lowered from 40 to catch more campus images
                             images["hero"] = processed
                             break
                 if "hero" in images:
                     break
 
-            # Look for logos
+            # Look for logos (but with stricter quality requirements applied in scoring)
             logo_selectors = [
                 'img[alt*="logo" i]',
                 'img[src*="logo" i]',
@@ -384,11 +500,13 @@ class MagicScholarImageExtractor:
                 ".logo img",
                 ".header-logo img",
                 ".site-logo img",
+                'img[alt*="seal" i]',  # University seals
+                'img[alt*="crest" i]',  # University crests
             ]
 
             for selector in logo_selectors:
                 logo_imgs = soup.select(selector)
-                for logo_img in logo_imgs[:2]:  # Check first 2 matches
+                for logo_img in logo_imgs[:2]:
                     if logo_img.get("src"):
                         logo_url = urljoin(url, logo_img.get("src"))
                         processed = self.download_and_process_image(
@@ -400,7 +518,7 @@ class MagicScholarImageExtractor:
                 if "logo" in images:
                     break
 
-            # Favicon as last resort
+            # Favicon as last resort (with heavy penalty in scoring)
             favicon = soup.find("link", rel=["icon", "shortcut icon"])
             if favicon and favicon.get("href"):
                 favicon_url = urljoin(url, favicon.get("href"))
@@ -419,7 +537,7 @@ class MagicScholarImageExtractor:
     def select_best_image(
         self, school_images: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
-        """Select the single best image for the school card"""
+        """Select the single best image with improved campus-focused logic"""
         if not school_images:
             return None
 
@@ -428,17 +546,31 @@ class MagicScholarImageExtractor:
             school_images.values(), key=lambda x: x["quality_score"], reverse=True
         )
 
-        # Prefer certain types with high scores
+        # First, look for high-quality campus imagery (prioritize og_image and hero with high scores)
         for img in sorted_images:
-            if img["image_type"] in ["og_image", "hero"] and img["quality_score"] >= 60:
+            if (
+                img["image_type"] in ["og_image", "hero"] and img["quality_score"] >= 65
+            ):  # Raised threshold from 60
                 return img
 
-        # Fall back to best scoring image of any type (except favicon unless it's really good)
+        # Next, accept good twitter images if they score well
         for img in sorted_images:
-            if img["image_type"] != "favicon" or img["quality_score"] >= 70:
+            if img["image_type"] == "twitter_image" and img["quality_score"] >= 60:
                 return img
 
-        # Last resort - any image
+        # Only accept logos if they score very well (indicating campus elements)
+        for img in sorted_images:
+            if (
+                img["image_type"] == "logo" and img["quality_score"] >= 70
+            ):  # High threshold for logos
+                return img
+
+        # Last resort - any non-favicon image with decent score
+        for img in sorted_images:
+            if img["image_type"] != "favicon" and img["quality_score"] >= 40:
+                return img
+
+        # Absolute last resort - best available image
         return sorted_images[0] if sorted_images else None
 
     def upload_image_to_spaces(
