@@ -9,6 +9,7 @@ when the application starts.
 from .user import User
 from .profile import UserProfile
 from .oauth import OAuthAccount, OAuthState
+from .institution import Institution
 
 
 # Import other models as they're created:
@@ -20,5 +21,5 @@ __all__ = [
     "UserProfile",
     "OAuthAccount",
     "OAuthState",
-    # Add other models as they're created
+    "Institution",
 ]
