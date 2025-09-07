@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Enhanced University Image Extractor for MagicScholar College Backend
-Extracts images from university websites and processes them for upload
+Enhanced University Image Extractor for MagicScholar
+Focuses on extracting the highest quality images with consistent sizing and ranking
 """
 
 import requests
@@ -15,15 +15,15 @@ import json
 import hashlib
 from PIL import Image, ImageOps
 import io
-import os
+import math
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
-class CollegeBackendImageExtractor:
+class EnhancedImageExtractor:
     def __init__(
-        self, output_dir="extracted_images", target_width=400, target_height=300
+        self, output_dir="enhanced_images", target_width=400, target_height=300
     ):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
@@ -48,7 +48,7 @@ class CollegeBackendImageExtractor:
         self.failed_urls = []
 
     def calculate_image_quality_score(self, image_info, image_type):
-        """Calculate a quality score for an image (0-100) - same as service"""
+        """Calculate a quality score for an image (0-100)"""
         score = 0
         width = image_info.get("width", 0)
         height = image_info.get("height", 0)
@@ -104,13 +104,10 @@ class CollegeBackendImageExtractor:
         return min(score, 100)  # Cap at 100
 
     def load_university_data(self, csv_path):
-        """Load university data from CSV file in college-backend"""
+        """Load university data from processed CSV"""
         try:
             df = pd.read_csv(csv_path)
             logger.info(f"Loaded {len(df)} universities from {csv_path}")
-
-            # Check what columns we have
-            logger.info(f"Available columns: {list(df.columns)}")
 
             # Look for website column
             website_col = None
@@ -284,7 +281,6 @@ class CollegeBackendImageExtractor:
                     "size_bytes": len(image_data),
                     "quality_score": quality_score,
                     "image_type": image_type,
-                    "image_data": image_data,  # Keep for upload service
                 }
 
         except Exception as e:
@@ -424,17 +420,25 @@ class CollegeBackendImageExtractor:
 
         logger.info(f"Processing: {school_name} ({website})")
 
-        # Get ID - try different column names
+        # Get ID
         institution_id = None
         for id_col in ["ipeds_id", "unitid", "UNITID", "id"]:
             if id_col in row.index:
                 institution_id = row[id_col]
                 break
 
+        # Get school metadata for ranking
+        carnegie_basic = row.get("carnegie_basic", "")
+        control_type = row.get("control_type", "")
+        size_category = row.get("size_category", "")
+
         result = {
             "institution_id": institution_id,
             "name": school_name,
             "website": website,
+            "carnegie_basic": carnegie_basic,
+            "control_type": control_type,
+            "size_category": size_category,
             "processed_at": pd.Timestamp.now().isoformat(),
             "images": {},
             "best_image": None,
@@ -449,6 +453,17 @@ class CollegeBackendImageExtractor:
             # Select best image
             best_image = self.select_best_image(extracted_images)
             result["best_image"] = best_image
+
+            # Copy best image to primary directory if not already there
+            if best_image and not best_image["local_path"].endswith("primary/"):
+                primary_filename = f"{school_name.replace(' ', '_')[:50]}_primary.jpg"
+                primary_path = self.output_dir / "primary" / primary_filename
+
+                # Copy standardized image
+                if Path(best_image["local_path"]).exists():
+                    img = Image.open(best_image["local_path"])
+                    img.save(primary_path, "JPEG", quality=85)
+                    best_image["primary_path"] = str(primary_path)
 
             image_count = len(extracted_images)
             best_score = best_image["quality_score"] if best_image else 0
@@ -521,9 +536,31 @@ class CollegeBackendImageExtractor:
             "poor_below_40": len([s for s in quality_scores if s < 40]),
         }
 
+        # School type analysis
+        school_type_quality = {}
+        for result in self.results:
+            if result["best_image"]:
+                school_type = result.get("carnegie_basic", "Unknown")[
+                    :20
+                ]  # Truncate for readability
+                if school_type not in school_type_quality:
+                    school_type_quality[school_type] = []
+                school_type_quality[school_type].append(
+                    result["best_image"]["quality_score"]
+                )
+
+        # Calculate averages
+        for school_type in school_type_quality:
+            scores = school_type_quality[school_type]
+            school_type_quality[school_type] = {
+                "count": len(scores),
+                "avg_quality": sum(scores) / len(scores),
+                "best_score": max(scores),
+            }
+
         # Create ranking by quality
         schools_with_scores = [
-            (r["name"], r["best_image"]["quality_score"])
+            (r["name"], r["best_image"]["quality_score"], r["carnegie_basic"])
             for r in self.results
             if r["best_image"]
         ]
@@ -538,6 +575,7 @@ class CollegeBackendImageExtractor:
                 "high_quality_rate": f"{(len(with_good_images)/total_processed)*100:.1f}%",
             },
             "quality_distribution": quality_distribution,
+            "school_type_analysis": school_type_quality,
             "top_20_schools": schools_with_scores[:20],
             "needs_attention": [
                 r["name"]
@@ -551,9 +589,12 @@ class CollegeBackendImageExtractor:
         with open(report_file, "w") as f:
             json.dump(report, f, indent=2, default=str)
 
+        # Generate database integration files
+        self.generate_database_integration()
+
         # Print summary
         logger.info("\n" + "=" * 60)
-        logger.info("COLLEGE BACKEND IMAGE EXTRACTION REPORT")
+        logger.info("ENHANCED EXTRACTION QUALITY REPORT")
         logger.info("=" * 60)
         logger.info(f"Total processed: {total_processed}")
         logger.info(
@@ -568,32 +609,221 @@ class CollegeBackendImageExtractor:
             logger.info(f"  {quality_level}: {count}")
 
         logger.info(f"\nTop 10 Schools by Image Quality:")
-        for i, (name, score) in enumerate(schools_with_scores[:10], 1):
-            logger.info(f"  {i:2d}. {name} (Score: {score})")
+        for i, (name, score, carnegie) in enumerate(schools_with_scores[:10], 1):
+            logger.info(f"  {i:2d}. {name} (Score: {score}) - {carnegie[:30]}")
 
         if report["needs_attention"]:
             logger.info(
                 f"\nSchools needing attention: {len(report['needs_attention'])}"
             )
 
+    def generate_database_integration(self):
+        """Generate SQL migration and update scripts for database integration"""
+
+        # 1. Create migration SQL to add image columns
+        migration_sql = """-- Migration: Add image columns to institutions table
+-- Run this ONCE to add the new columns
+
+ALTER TABLE institutions 
+ADD COLUMN IF NOT EXISTS primary_image_url VARCHAR(500),
+ADD COLUMN IF NOT EXISTS primary_image_quality_score INTEGER,
+ADD COLUMN IF NOT EXISTS logo_image_url VARCHAR(500),
+ADD COLUMN IF NOT EXISTS image_extraction_date TIMESTAMP,
+ADD COLUMN IF NOT EXISTS image_extraction_status VARCHAR(50);
+
+-- Add indexes for performance
+CREATE INDEX IF NOT EXISTS ix_institutions_image_quality 
+ON institutions(primary_image_quality_score DESC);
+
+CREATE INDEX IF NOT EXISTS ix_institutions_image_status 
+ON institutions(image_extraction_status);
+
+-- Add comments
+COMMENT ON COLUMN institutions.primary_image_url IS 'URL to the best quality standardized image for school cards';
+COMMENT ON COLUMN institutions.primary_image_quality_score IS 'Quality score 0-100 for ranking/sorting schools by image quality';
+COMMENT ON COLUMN institutions.logo_image_url IS 'URL to clean school logo image';
+COMMENT ON COLUMN institutions.image_extraction_date IS 'When images were last extracted/updated';
+COMMENT ON COLUMN institutions.image_extraction_status IS 'Status: success, failed, needs_review, etc.';
+"""
+
+        migration_file = self.output_dir / "001_add_image_columns.sql"
+        with open(migration_file, "w") as f:
+            f.write(migration_sql)
+
+        # 2. Generate UPDATE statements for each processed school
+        update_statements = []
+        update_statements.append("-- Update statements to populate image data")
+        update_statements.append("-- Run after images are hosted on your web server")
+        update_statements.append(
+            "-- Replace 'https://your-domain.com/images/' with your actual image hosting URL"
+        )
+        update_statements.append("")
+
+        base_url = "https://your-domain.com/images/"  # User will need to replace this
+
+        for result in self.results:
+            ipeds_id = result["institution_id"]
+            name = result["name"]
+            status = result["status"]
+
+            # Escape single quotes in name for SQL
+            safe_name = name.replace("'", "''")
+
+            if result["best_image"]:
+                best_img = result["best_image"]
+                primary_filename = Path(best_img["local_path"]).name
+                primary_url = f"{base_url}primary/{primary_filename}"
+                quality_score = best_img["quality_score"]
+
+                # Logo URL if available
+                logo_url = "NULL"
+                if "logo" in result["images"]:
+                    logo_filename = Path(result["images"]["logo"]["local_path"]).name
+                    logo_url = f"'{base_url}logos/{logo_filename}'"
+
+                update_sql = f"""UPDATE institutions SET 
+    primary_image_url = '{primary_url}',
+    primary_image_quality_score = {quality_score},
+    logo_image_url = {logo_url},
+    image_extraction_date = NOW(),
+    image_extraction_status = '{status}'
+WHERE ipeds_id = {ipeds_id}; -- {safe_name}"""
+
+            else:
+                # No good images found
+                update_sql = f"""UPDATE institutions SET 
+    primary_image_url = NULL,
+    primary_image_quality_score = 0,
+    logo_image_url = NULL,
+    image_extraction_date = NOW(),
+    image_extraction_status = '{status}'
+WHERE ipeds_id = {ipeds_id}; -- {safe_name}"""
+
+            update_statements.append(update_sql)
+            update_statements.append("")
+
+        update_file = self.output_dir / "002_update_image_data.sql"
+        with open(update_file, "w") as f:
+            f.write("\n".join(update_statements))
+
+        # 3. Generate image hosting manifest for deployment
+        hosting_manifest = {
+            "instructions": {
+                "step_1": "Upload the enhanced_images/ directory to your web server",
+                "step_2": "Make sure images are accessible at: https://your-domain.com/images/",
+                "step_3": "Update the base_url in 002_update_image_data.sql",
+                "step_4": "Run 001_add_image_columns.sql (one time only)",
+                "step_5": "Run 002_update_image_data.sql to populate the data",
+            },
+            "directory_structure": {
+                "primary/": "Best images standardized to 400x300px for school cards",
+                "logos/": "Clean school logos for headers/search results",
+                "raw/": "Original unprocessed images for reference",
+            },
+            "image_files": [],
+        }
+
+        # List all generated images
+        for result in self.results:
+            if result["best_image"]:
+                hosting_manifest["image_files"].append(
+                    {
+                        "school": result["name"],
+                        "ipeds_id": result["institution_id"],
+                        "primary_image": Path(result["best_image"]["local_path"]).name,
+                        "quality_score": result["best_image"]["quality_score"],
+                        "logos": [
+                            Path(img["local_path"]).name
+                            for img_type, img in result["images"].items()
+                            if img_type == "logo"
+                        ],
+                    }
+                )
+
+        manifest_file = self.output_dir / "hosting_manifest.json"
+        with open(manifest_file, "w") as f:
+            json.dump(hosting_manifest, f, indent=2)
+
+        # 4. Generate a simple Python script to verify image URLs work
+        verification_script = '''#!/usr/bin/env python3
+"""
+Image URL Verification Script
+Run this after hosting images to verify all URLs are accessible
+"""
+
+import requests
+import json
+from pathlib import Path
+
+def verify_image_urls(base_url="https://your-domain.com/images/"):
+    """Verify that all generated image URLs are accessible"""
+    
+    with open("extraction_results.json") as f:
+        results = json.load(f)
+    
+    print(f"Verifying image URLs with base: {base_url}")
+    print("="*50)
+    
+    success_count = 0
+    total_count = 0
+    
+    for result in results:
+        if result['best_image']:
+            total_count += 1
+            filename = Path(result['best_image']['local_path']).name
+            url = f"{base_url}primary/{filename}"
+            
+            try:
+                response = requests.head(url, timeout=5)
+                if response.status_code == 200:
+                    success_count += 1
+                    status = "✓"
+                else:
+                    status = f"✗ ({response.status_code})"
+            except:
+                status = "✗ (failed)"
+            
+            print(f"{status} {result['name'][:40]:<40} {url}")
+    
+    print("="*50)
+    print(f"Verification complete: {success_count}/{total_count} images accessible")
+    print(f"Success rate: {(success_count/total_count)*100:.1f}%")
+
+if __name__ == "__main__":
+    # Update this URL to match your hosting setup
+    verify_image_urls("https://your-domain.com/images/")
+'''
+
+        verification_file = self.output_dir / "verify_hosted_images.py"
+        with open(verification_file, "w") as f:
+            f.write(verification_script)
+
+        logger.info("\n" + "=" * 60)
+        logger.info("DATABASE INTEGRATION FILES GENERATED")
+        logger.info("=" * 60)
+        logger.info(f"Migration SQL: {migration_file}")
+        logger.info(f"Update SQL: {update_file}")
+        logger.info(f"Hosting guide: {manifest_file}")
+        logger.info(f"Verification script: {verification_file}")
+        logger.info("\nNext steps:")
+        logger.info("1. Host images on your web server")
+        logger.info("2. Update base URL in update SQL file")
+        logger.info("3. Run migration to add columns")
+        logger.info("4. Run updates to populate image data")
+
 
 def main():
     """Main execution function"""
-    extractor = CollegeBackendImageExtractor(
+    extractor = EnhancedImageExtractor(
         target_width=400,  # Consistent card width
         target_height=300,  # Consistent card height
     )
 
-    # Load university data from college-backend data directory
-    csv_path = "data/institutions_processed.csv"
+    # Load university data
+    csv_path = "processed_data/image_test.csv"
 
     if not Path(csv_path).exists():
         logger.error(f"File not found: {csv_path}")
-        logger.info("Available files in data directory:")
-        data_dir = Path("data")
-        if data_dir.exists():
-            for file in data_dir.glob("*.csv"):
-                logger.info(f"  {file.name}")
         return
 
     universities_df = extractor.load_university_data(csv_path)
@@ -605,13 +835,13 @@ def main():
     print(f"\nFound {len(universities_df)} universities with websites")
     print("Sample of available data:")
     display_cols = ["name", "website"]
-    if "state" in universities_df.columns:
-        display_cols.append("state")
+    if "carnegie_basic" in universities_df.columns:
+        display_cols.append("carnegie_basic")
     available_cols = [col for col in display_cols if col in universities_df.columns]
     print(universities_df[available_cols].head())
 
     print(f"\nProcessing options:")
-    print(f"1. Process all {len(universities_df)} schools")
+    print(f"1. Process all {len(universities_df)} schools in test file")
     print(f"2. Process just 5 schools for quick test")
     print(f"3. Process just 10 schools")
 
@@ -623,17 +853,15 @@ def main():
     elif choice == "3":
         max_unis = 10
 
-    print(f"\nStarting image extraction...")
+    print(f"\nStarting enhanced image extraction...")
     print(f"Output directory: {extractor.output_dir}")
     print(f"Target image size: {extractor.target_width}x{extractor.target_height}px")
-    print(f"Processing from: {csv_path}")
 
     # Process universities
     extractor.process_batch(universities_df, max_universities=max_unis)
 
-    logger.info("Image extraction complete!")
-    logger.info(f"Check {extractor.output_dir} for organized images and results")
-    logger.info("Next: Use admin API endpoints to upload these images to Digital Ocean")
+    logger.info("Enhanced processing complete!")
+    logger.info(f"Check {extractor.output_dir} for organized images and quality report")
 
 
 if __name__ == "__main__":
