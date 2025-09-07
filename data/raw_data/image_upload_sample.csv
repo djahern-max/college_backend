@@ -1,0 +1,50 @@
+ipeds_id,name,address,city,state,zip_code,website,phone,president_name,president_title,control_type,size_category,region
+100654,Alabama A & M University,4900 Meridian Street,Normal,AL,35762,www.aamu.edu/,2563725000,Dr. Daniel K. Wims,President,Public,Medium,Southeast
+100663,University of Alabama at Birmingham,Administration Bldg Suite 1070,Birmingham,AL,35294-0110,https://www.uab.edu/,2059344011,Ray L. Watts,President,Public,Very large,Southeast
+100690,Amridge University,1200 Taylor Rd,Montgomery,AL,36117-3553,https://www.amridgeuniversity.edu/,3.34E+13,Michael C.Turner,President,Private nonprofit,Very small,Southeast
+100706,University of Alabama in Huntsville,301 Sparkman Dr,Huntsville,AL,35899,www.uah.edu/,2568246120,Chuck Karr,President,Public,Medium,Southeast
+100724,Alabama State University,915 S Jackson Street,Montgomery,AL,36104-0271,www.alasu.edu/,3342294100,Quinton T. Ross,President,Public,Small,Southeast
+100733,University of Alabama System Office,500 University Blvd. East,Tuscaloosa,AL,35401,www.uasystem.edu/,2053485122,Finis St. John IV,Chancellor,Public,Unknown,Southeast
+100751,The University of Alabama,739 University Blvd,Tuscaloosa,AL,35487-0100,www.ua.edu/,2053486010,Dr. Stuart R. Bell,President,Public,Very large,Southeast
+100760,Central Alabama Community College,1675 Cherokee Rd,Alexander City,AL,35010,www.cacc.edu/,2562346346,Jeff Lynn,President,Public,Small,Southeast
+100812,Athens State University,300 N Beaty St,Athens,AL,35611,https://www.athens.edu/,2562338100,Dr. Catherine Wehlburg,Interim President,Public,Small,Southeast
+100830,Auburn University at Montgomery,7440 East Drive,Montgomery,AL,36117-3596,www.aum.edu/,3342443000,Carl A. Stockton,Chancellor,Public,Medium,Southeast
+100858,Auburn University,,Auburn,AL,36849,www.auburn.edu/,3348444000,Chris Roberts,President,Public,Very large,Southeast
+100937,Birmingham-Southern College,900 Arkadelphia Road,Birmingham,AL,35254,www.bsc.edu/,2052264600,Mr. Daniel Coleman,President,Private nonprofit,Very small,Southeast
+101028,Chattahoochee Valley Community College,2602 College Drive,Phenix City,AL,36869,https://www.cv.edu/,3342914900,Jacqueline Screws,President,Public,Small,Southeast
+101116,South University-Montgomery,5355 Vaughn Rd,Montgomery,AL,36116,www.southuniversity.edu/,3343958800,Kenneth Macon,Campus Director & Dean of Academic Affairs & Ops,Private for-profit,Very small,Southeast
+101143,Enterprise State Community College,600 Plaza Drive,Enterprise,AL,36330-1300,www.escc.edu/,3343472623,Danny Long,President,Public,Small,Southeast
+101161,Coastal Alabama Community College,1900 U S Highway 31 South,Bay Minette,AL,36507-2698,www.coastalalabama.edu/,2515802100,Craig Pouncey,President,Public,Medium,Southeast
+101189,Faulkner University,5345 Atlanta Hwy,Montgomery,AL,36109-3390,www.faulkner.edu/,3342725820,Mitch Henry,President,Private nonprofit,Small,Southeast
+101240,Gadsden State Community College,1001 George Wallace Dr,Gadsden,AL,35903,www.gadsdenstate.edu/,2565498200,Dr. Kathy L. Murphy,President,Public,Small,Southeast
+101277,New Beginning College of Cosmetology,421 Martling Road,Albertville,AL,35951,www.nbccosmetology.com/,2568786430,Amanda Baugh,DIRECTOR,Private for-profit,Very small,Southeast
+101286,George C Wallace Community College-Dothan,1141 Wallace Drive,Dothan,AL,36303-9234,www.wallace.edu/,3349833521,Linda C Young,President,Public,Small,Southeast
+101295,George C Wallace State Community College-Hanceville,801 Main St NW,Hanceville,AL,35077-2000,https://www.wallacestate.edu/,2563528000,Vicki P. Karolewics,President,Public,Medium,Southeast
+101301,George C Wallace State Community College-Selma,3000 Earl Goodwin Parkway,Selma,AL,36702-2808,https://www.wccs.edu/,3348769227,Dr. James M. Mitchell,President,Public,Small,Southeast
+101365,Herzing University-Birmingham,280 West Valley Ave,Birmingham,AL,35209,https://www.herzing.edu/,2059162800,Sarah Higgins,President,Private nonprofit,Very small,Southeast
+101435,Huntingdon College,1500 East Fairview Avenue,Montgomery,AL,36106-2148,https://www.huntingdon.edu/,3348334497,J. Cameron West,President,Private nonprofit,Very small,Southeast
+101453,Heritage Christian University,3625 Helton Dr,Florence,AL,35630-9977,www.hcu.edu/,2567666610,W. Kirk Brothers,President,Private nonprofit,Very small,Southeast
+101462,J. F. Drake State Community and Technical College,3421 Meridian St N,Huntsville,AL,35811,https://drakestate.edu/,2565398161,Dr. Patricia Sims,President,Public,Small,Southeast
+101471,J F Ingram State Technical College,5375 Ingram Rd,Deatsville,AL,36022,www.istc.edu/,3.34E+13,Annette Funderburk,President,Public,Very small,Southeast
+101480,Jacksonville State University,700 Pelham Road North,Jacksonville,AL,36265,www.jsu.edu/,2567825781,Don Killingsworth,President,Public,Medium,Southeast
+101505,Jefferson State Community College,2601 Carson Rd,Birmingham,AL,35215-3098,www.jeffersonstate.edu/,2058531200,Keith Brown,President,Public,Medium,Southeast
+101514,John C Calhoun State Community College,6250 U S Highway 31 N,Tanner,AL,35671,https://calhoun.edu/,2563062500,Dr. Jimmy Hodges,President,Public,Medium,Southeast
+101569,Lawson State Community College,3060 Wilson Rd SW,Birmingham,AL,35221-1717,www.lawsonstate.edu/,2059252515,Dr. Cynthia Anthony,President,Public,Small,Southeast
+101587,University of West Alabama,Station One,Livingston,AL,35470,www.uwa.edu/,2056523400,Dr. Ken Tucker,President,Public,Medium,Southeast
+101602,Lurleen B Wallace Community College,1000 Dannelly Blvd.,Andalusia,AL,36420-1224,https://www.lbwcc.edu/,3342226591,Brock Kelley,President,Public,Small,Southeast
+101648,Marion Military Institute,1101 Washington St,Marion,AL,36756-3207,www.marionmilitary.edu/,8006641842,Col David J. Mollahan,President,Public,Very small,Southeast
+101675,Miles College,5500 Myron Massey Blvd,Fairfield,AL,35064-2621,https://www.miles.edu/,2.06E+13,Bobbie Knight,President,Private nonprofit,Small,Southeast
+101693,University of Mobile,5735 College Parkway,Mobile,AL,36613-2842,https://www.umobile.edu/,2516755990,Dr. Lonnie Burnett,President,Private nonprofit,Small,Southeast
+101709,University of Montevallo,Station 6001,Montevallo,AL,35115-6000,www.montevallo.edu/,2056656155,John W. Stewart III,President,Public,Small,Southeast
+101736,Northwest Shoals Community College,800 George Wallace Blvd,Muscle Shoals,AL,35661,https://www.nwscc.edu/,2563315200,Jeff Goodwin,President,Public,Small,Southeast
+101879,University of North Alabama,One Harrison Plaza,Florence,AL,35632-0001,https://www.una.edu/,2567654100,Kenneth D. Kitts,President,Public,Large,Southeast
+101897,Northeast Alabama Community College,138  Highway 35,Rainsville,AL,35986,https://www.nacc.edu/,2.57E+13,J. David Campbell,President,Public,Small,Southeast
+101912,Oakwood University,7000 Adventist Blvd NW,Huntsville,AL,35896,https://www2.oakwood.edu/,2567267000,Leslie Pollard,President,Private nonprofit,Small,Southeast
+101994,Reid State Technical College,100 and Hwy 83,Evergreen,AL,36401,www.rstc.edu/,2515781313,Dr. Coretta Boykin,President,Public,Very small,Southeast
+102030,Bishop State Community College,351 North Broad Street,Mobile,AL,36603-5898,www.bishop.edu/,2514057000,Olivier Charles,President,Public,Small,Southeast
+102049,Samford University,800 Lakeshore Drive,Birmingham,AL,35229-2240,www.samford.edu/,2057262011,Dr. Beck Taylor,President,Private nonprofit,Medium,Southeast
+102058,Selma University,"1501 Boynton St, Dinkins Hall",Selma,AL,36701,https://selmau.edu/,3.35E+12,Stanford Angion,President,Private nonprofit,Very small,Southeast
+102067,Shelton State Community College,9500 Old Greensboro Rd,Tuscaloosa,AL,35405-8522,www.sheltonstate.edu/,2053912211,Dr. Chris Cox,President,Public,Small,Southeast
+102076,Snead State Community College,102 Elder Street,Boaz,AL,35957-0734,www.snead.edu/,2565935120,Mr. Joe Whitmore,President,Public,Small,Southeast
+102094,University of South Alabama,307 N University Blvd,Mobile,AL,36688-0002,www.southalabama.edu/,2514606101,Jo Bonner,President,Public,Large,Southeast
+102234,Spring Hill College,4000 Dauphin St,Mobile,AL,36608-1780,https://www.shc.edu/,2513804000,Mary van Brunt,President,Private nonprofit,Very small,Southeast
