@@ -1,3 +1,4 @@
+# app/core/config.py
 from pydantic_settings import BaseSettings
 from typing import List
 import os
@@ -15,7 +16,7 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str = "postgresql://username:password@localhost:5432/magicscholar_db"
-    DB_PASSWORD: str = ""  # Added missing field
+    DB_PASSWORD: str = ""
 
     # Security
     SECRET_KEY: str = "your-super-secret-key-change-this-in-production"
@@ -29,7 +30,15 @@ class Settings(BaseSettings):
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379"
-    REDIS_PASSWORD: str = ""  # Added missing field
+    REDIS_PASSWORD: str = ""
+
+    # Digital Ocean Spaces Configuration - Using your existing variable names
+    DIGITAL_OCEAN_SPACES_ACCESS_KEY: str = ""
+    DIGITAL_OCEAN_SPACES_SECRET_KEY: str = ""
+    DIGITAL_OCEAN_SPACES_ENDPOINT: str = ""
+    DIGITAL_OCEAN_SPACES_BUCKET: str = ""
+    DIGITAL_OCEAN_SPACES_REGION: str = ""
+    IMAGE_CDN_BASE_URL: str = ""
 
     # CORS - Dynamic based on environment
     @property
@@ -58,7 +67,7 @@ class Settings(BaseSettings):
     @property
     def API_BASE_URL(self) -> str:
         if self.ENVIRONMENT == "production":
-            return "https://www.magicscholar.com"  # Fixed: Use www.magicscholar.com
+            return "https://www.magicscholar.com"
         elif self.ENVIRONMENT == "staging":
             return "https://staging.magicscholar.com"
         else:  # development
@@ -71,10 +80,10 @@ class Settings(BaseSettings):
     LINKEDIN_CLIENT_ID: str = ""
     LINKEDIN_CLIENT_SECRET: str = ""
 
-    # TikTok OAuth (note the different field name)
+    # TikTok OAuth
     TIKTOK_CLIENT_ID: str = ""
     TIKTOK_CLIENT_SECRET: str = ""
-    TIKTOK_CLIENT_KEY: str = ""  # Added this field that TikTok uses
+    TIKTOK_CLIENT_KEY: str = ""
 
     # OAuth Redirect URIs - Dynamic based on environment
     @property
@@ -92,7 +101,7 @@ class Settings(BaseSettings):
     class Config:
         case_sensitive = True
         env_file = ".env"
-        extra = "ignore"  # This will ignore extra fields in .env that aren't defined
+        extra = "ignore"
 
 
 settings = Settings()
