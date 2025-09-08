@@ -20,6 +20,23 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.get("/featured", response_model=List[InstitutionResponse])
+async def get_featured_institutions(
+    limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db)
+):
+    """Get featured institutions with best images for homepage"""
+    try:
+        service = InstitutionService(db)
+        institutions = service.get_featured_institutions(limit)
+        return institutions
+    except Exception as e:
+        logger.error(f"Error getting featured institutions: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get featured institutions: {str(e)}",
+        )
+
+
 @router.get("/{institution_id}", response_model=InstitutionResponse)
 async def get_institution_by_id(institution_id: int, db: Session = Depends(get_db)):
     """Get institution by ID with complete image information"""
@@ -128,21 +145,4 @@ async def list_institutions(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list institutions: {str(e)}",
-        )
-
-
-@router.get("/featured", response_model=List[InstitutionResponse])
-async def get_featured_institutions(
-    limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db)
-):
-    """Get featured institutions with best images for homepage"""
-    try:
-        service = InstitutionService(db)
-        institutions = service.get_featured_institutions(limit)
-        return institutions
-    except Exception as e:
-        logger.error(f"Error getting featured institutions: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get featured institutions: {str(e)}",
         )
