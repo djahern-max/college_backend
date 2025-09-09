@@ -1,4 +1,5 @@
-# app/services/institution.py
+# app/services/institution.py - FIXED SQL syntax for customer_rank ordering
+
 from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, and_, desc
@@ -225,11 +226,10 @@ class InstitutionService:
                     Institution.image_extraction_status == search_params.image_status
                 )
 
-            # CRITICAL: Always order by customer_rank first, then image quality
-            # This ensures paying customers always appear before non-paying ones
+            # FIXED: Correct SQL syntax - DESC comes before NULLS LAST
             query = query.order_by(
-                desc(Institution.customer_rank.nullslast()),
-                desc(Institution.primary_image_quality_score.nullslast()),
+                desc(Institution.customer_rank).nulls_last(),
+                desc(Institution.primary_image_quality_score).nulls_last(),
                 Institution.name,
             )
 
@@ -254,8 +254,8 @@ class InstitutionService:
             return (
                 self.db.query(Institution)
                 .order_by(
-                    desc(Institution.customer_rank.nullslast()),
-                    desc(Institution.primary_image_quality_score.nullslast()),
+                    desc(Institution.customer_rank).nulls_last(),
+                    desc(Institution.primary_image_quality_score).nulls_last(),
                     Institution.name,
                 )
                 .offset(offset)
@@ -298,8 +298,8 @@ class InstitutionService:
                 self.db.query(Institution)
                 .filter(Institution.primary_image_quality_score >= min_score)
                 .order_by(
-                    desc(Institution.customer_rank.nullslast()),
-                    desc(Institution.primary_image_quality_score.nullslast()),
+                    desc(Institution.customer_rank).nulls_last(),
+                    desc(Institution.primary_image_quality_score).nulls_last(),
                     Institution.name,
                 )
                 .limit(limit)
@@ -328,8 +328,8 @@ class InstitutionService:
                 self.db.query(Institution)
                 .filter(Institution.state == state.upper())
                 .order_by(
-                    desc(Institution.customer_rank.nullslast()),
-                    desc(Institution.primary_image_quality_score.nullslast()),
+                    desc(Institution.customer_rank).nulls_last(),
+                    desc(Institution.primary_image_quality_score).nulls_last(),
                     Institution.name,
                 )
                 .all()
@@ -347,8 +347,8 @@ class InstitutionService:
                 self.db.query(Institution)
                 .filter(Institution.region == region)
                 .order_by(
-                    desc(Institution.customer_rank.nullslast()),
-                    desc(Institution.primary_image_quality_score.nullslast()),
+                    desc(Institution.customer_rank).nulls_last(),
+                    desc(Institution.primary_image_quality_score).nulls_last(),
                     Institution.state,
                     Institution.name,
                 )
@@ -367,8 +367,8 @@ class InstitutionService:
                 self.db.query(Institution)
                 .filter(Institution.control_type == ControlType.PUBLIC)
                 .order_by(
-                    desc(Institution.customer_rank.nullslast()),
-                    desc(Institution.primary_image_quality_score.nullslast()),
+                    desc(Institution.customer_rank).nulls_last(),
+                    desc(Institution.primary_image_quality_score).nulls_last(),
                     Institution.state,
                     Institution.name,
                 )
@@ -390,8 +390,8 @@ class InstitutionService:
                     )
                 )
                 .order_by(
-                    desc(Institution.customer_rank.nullslast()),
-                    desc(Institution.primary_image_quality_score.nullslast()),
+                    desc(Institution.customer_rank).nulls_last(),
+                    desc(Institution.primary_image_quality_score).nulls_last(),
                     Institution.state,
                     Institution.name,
                 )
@@ -574,7 +574,7 @@ class InstitutionService:
     def get_featured_institutions(
         self, limit: int = 20, offset: int = 0
     ) -> List[Institution]:
-        """Get featured institutions ordered by customer_rank first, then image quality"""
+        """Get featured institutions with best images and pagination support"""
         try:
             return (
                 self.db.query(Institution)
@@ -586,11 +586,10 @@ class InstitutionService:
                     )
                 )
                 .order_by(
-                    desc(Institution.customer_rank.nullslast()),
-                    desc(Institution.primary_image_quality_score.nullslast()),
+                    desc(Institution.primary_image_quality_score).nulls_last(),
                     Institution.name,
                 )
-                .offset(offset)
+                .offset(offset)  # THIS IS KEY FOR PAGINATION
                 .limit(limit)
                 .all()
             )

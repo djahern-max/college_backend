@@ -23,12 +23,16 @@ router = APIRouter()
 
 @router.get("/featured", response_model=List[InstitutionResponse])
 async def get_featured_institutions(
-    limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db)
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),  # MAKE SURE THIS LINE EXISTS
+    db: Session = Depends(get_db),
 ):
-    """Get featured institutions with best images for homepage"""
+    """Get featured institutions with best images for homepage with pagination support"""
     try:
         service = InstitutionService(db)
-        institutions = service.get_featured_institutions(limit)
+        institutions = service.get_featured_institutions(
+            limit, offset
+        )  # PASS BOTH PARAMETERS
         return institutions
     except Exception as e:
         logger.error(f"Error getting featured institutions: {str(e)}")
