@@ -586,6 +586,7 @@ class InstitutionService:
                     )
                 )
                 .order_by(
+                    desc(Institution.customer_rank).nulls_last(),
                     desc(Institution.primary_image_quality_score).nulls_last(),
                     Institution.name,
                 )
