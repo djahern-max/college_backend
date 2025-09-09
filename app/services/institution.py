@@ -180,7 +180,7 @@ class InstitutionService:
     def search_institutions(
         self, search_params: InstitutionSearch, page: int = 1, per_page: int = 50
     ) -> Tuple[List[Institution], int]:
-        """Search institutions with filters and pagination"""
+        """Search institutions with filters and pagination - ALWAYS ordered by customer_rank first"""
         try:
             query = self.db.query(Institution)
 
@@ -225,8 +225,10 @@ class InstitutionService:
                     Institution.image_extraction_status == search_params.image_status
                 )
 
-            # Default ordering by image quality (best first), then by name
+            # CRITICAL: Always order by customer_rank first, then image quality
+            # This ensures paying customers always appear before non-paying ones
             query = query.order_by(
+                desc(Institution.customer_rank.nullslast()),
                 desc(Institution.primary_image_quality_score.nullslast()),
                 Institution.name,
             )
@@ -244,13 +246,64 @@ class InstitutionService:
             logger.error(f"Database error searching institutions: {str(e)}")
             raise Exception(f"Database error: {str(e)}")
 
+    def get_institutions_by_customer_priority(
+        self, limit: int = 50, offset: int = 0
+    ) -> List[Institution]:
+        """Get institutions ordered by customer ranking (for admin/advertising management)"""
+        try:
+            return (
+                self.db.query(Institution)
+                .order_by(
+                    desc(Institution.customer_rank.nullslast()),
+                    desc(Institution.primary_image_quality_score.nullslast()),
+                    Institution.name,
+                )
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+        except SQLAlchemyError as e:
+            logger.error(f"Database error getting institutions by priority: {str(e)}")
+            raise Exception(f"Database error: {str(e)}")
+
+    def update_customer_rank(
+        self, institution_id: int, new_rank: int
+    ) -> Optional[Institution]:
+        """Update customer ranking for an institution (when they change advertising tier)"""
+        try:
+            institution = self.get_institution_by_id(institution_id)
+            if not institution:
+                return None
+
+            institution.customer_rank = new_rank
+            self.db.commit()
+            self.db.refresh(institution)
+
+            logger.info(f"Updated customer rank for {institution.name}: {new_rank}")
+            return institution
+
+        except SQLAlchemyError as e:
+            self.db.rollback()
+            logger.error(
+                f"Database error updating customer rank for institution {institution_id}: {str(e)}"
+            )
+            raise Exception(f"Database error: {str(e)}")
+
     def get_institutions_by_image_quality(
         self, min_score: int = 60, limit: int = 50
     ) -> List[Institution]:
-        """Get institutions ordered by image quality for featured display"""
+        """Get institutions ordered by customer_rank first, then image quality"""
         try:
-            return Institution.get_by_image_quality(
-                self.db, limit=limit, min_score=min_score
+            return (
+                self.db.query(Institution)
+                .filter(Institution.primary_image_quality_score >= min_score)
+                .order_by(
+                    desc(Institution.customer_rank.nullslast()),
+                    desc(Institution.primary_image_quality_score.nullslast()),
+                    Institution.name,
+                )
+                .limit(limit)
+                .all()
             )
         except SQLAlchemyError as e:
             logger.error(
@@ -269,12 +322,13 @@ class InstitutionService:
             raise Exception(f"Database error: {str(e)}")
 
     def get_institutions_by_state(self, state: str) -> List[Institution]:
-        """Get all institutions in a specific state"""
+        """Get all institutions in a specific state - UPDATED to use customer_rank first"""
         try:
             return (
                 self.db.query(Institution)
                 .filter(Institution.state == state.upper())
                 .order_by(
+                    desc(Institution.customer_rank.nullslast()),
                     desc(Institution.primary_image_quality_score.nullslast()),
                     Institution.name,
                 )
@@ -287,12 +341,13 @@ class InstitutionService:
             raise Exception(f"Database error: {str(e)}")
 
     def get_institutions_by_region(self, region: USRegion) -> List[Institution]:
-        """Get all institutions in a specific region"""
+        """Get all institutions in a specific region - UPDATED to use customer_rank first"""
         try:
             return (
                 self.db.query(Institution)
                 .filter(Institution.region == region)
                 .order_by(
+                    desc(Institution.customer_rank.nullslast()),
                     desc(Institution.primary_image_quality_score.nullslast()),
                     Institution.state,
                     Institution.name,
@@ -306,12 +361,13 @@ class InstitutionService:
             raise Exception(f"Database error: {str(e)}")
 
     def get_public_institutions(self) -> List[Institution]:
-        """Get all public institutions"""
+        """Get all public institutions - UPDATED to use customer_rank first"""
         try:
             return (
                 self.db.query(Institution)
                 .filter(Institution.control_type == ControlType.PUBLIC)
                 .order_by(
+                    desc(Institution.customer_rank.nullslast()),
                     desc(Institution.primary_image_quality_score.nullslast()),
                     Institution.state,
                     Institution.name,
@@ -323,7 +379,7 @@ class InstitutionService:
             raise Exception(f"Database error: {str(e)}")
 
     def get_private_institutions(self) -> List[Institution]:
-        """Get all private institutions (both nonprofit and for-profit)"""
+        """Get all private institutions (both nonprofit and for-profit) - UPDATED to use customer_rank first"""
         try:
             return (
                 self.db.query(Institution)
@@ -334,6 +390,7 @@ class InstitutionService:
                     )
                 )
                 .order_by(
+                    desc(Institution.customer_rank.nullslast()),
                     desc(Institution.primary_image_quality_score.nullslast()),
                     Institution.state,
                     Institution.name,
@@ -514,14 +571,26 @@ class InstitutionService:
         )
         return successful, failed, errors
 
-    def get_featured_institutions(self, limit: int = 20) -> List[Institution]:
-        """Get featured institutions with the best images for homepage display"""
+    def get_featured_institutions(
+        self, limit: int = 20, offset: int = 0
+    ) -> List[Institution]:
+        """Get featured institutions ordered by customer_rank first, then image quality"""
         try:
             return (
                 self.db.query(Institution)
-                .filter(Institution.primary_image_quality_score >= 70)
-                .filter(Institution.primary_image_url.isnot(None))
-                .order_by(desc(Institution.primary_image_quality_score))
+                .filter(
+                    and_(
+                        Institution.primary_image_url.isnot(None),
+                        Institution.primary_image_quality_score
+                        >= 60,  # Good quality threshold
+                    )
+                )
+                .order_by(
+                    desc(Institution.customer_rank.nullslast()),
+                    desc(Institution.primary_image_quality_score.nullslast()),
+                    Institution.name,
+                )
+                .offset(offset)
                 .limit(limit)
                 .all()
             )

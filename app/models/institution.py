@@ -4,14 +4,22 @@ from sqlalchemy import (
     Integer,
     String,
     Float,
-    Enum as SQLEnum,
     DateTime,
+    Enum as SQLEnum,
+    Text,
+    Index,
+    desc,
+    and_,
+    or_,
+    func,
 )
 from sqlalchemy.sql import func
 from app.core.database import Base
 from enum import Enum
 from datetime import datetime
 from typing import Optional
+from sqlalchemy.orm import Session, relationship
+from typing import List
 
 
 class ControlType(str, Enum):
@@ -115,10 +123,35 @@ class Institution(Base):
     )
     primary_image_quality_score = Column(
         Integer,
-        default=0,
-        index=True,
+        nullable=True,
         comment="Quality score 0-100 for ranking schools by image quality",
+        index=True,
     )
+
+    customer_rank = Column(
+        Integer,
+        nullable=True,
+        comment="Customer ranking for advertising priority (higher = better placement)",
+        index=True,
+    )
+
+    logo_image_url = Column(
+        String(500),
+        nullable=True,
+        comment="CDN URL to school logo for headers/search results",
+    )
+    image_extraction_status = Column(
+        SQLEnum(ImageExtractionStatus),
+        nullable=True,
+        comment="Status of image extraction process",
+        index=True,
+    )
+    image_extraction_date = Column(
+        DateTime,
+        nullable=True,
+        comment="When images were last extracted/updated",
+    )
+
     logo_image_url = Column(
         String(500),
         nullable=True,
@@ -263,3 +296,47 @@ class Institution(Base):
             .order_by(cls.primary_image_quality_score.desc())
             .all()
         )
+
+    @classmethod
+    def get_featured_institutions(
+        cls, db: Session, limit: int = 20, offset: int = 0, min_quality: int = 60
+    ) -> List["Institution"]:
+        """Get featured institutions ordered by customer_rank first, then image quality"""
+        return (
+            db.query(cls)
+            .filter(
+                and_(
+                    cls.primary_image_url.isnot(None),
+                    cls.primary_image_quality_score >= min_quality,
+                )
+            )
+            .order_by(
+                desc(cls.customer_rank.nullslast()),
+                desc(cls.primary_image_quality_score.nullslast()),
+                cls.name,
+            )
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+
+    @classmethod
+    def get_by_customer_priority(
+        cls, db: Session, limit: int = 50, offset: int = 0
+    ) -> List["Institution"]:
+        """Get institutions ordered by customer ranking (advertising priority)"""
+        return (
+            db.query(cls)
+            .order_by(
+                desc(cls.customer_rank.nullslast()),
+                desc(cls.primary_image_quality_score.nullslast()),
+                cls.name,
+            )
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+
+    def update_customer_rank(self, new_rank: int) -> None:
+        """Update customer ranking (for when they upgrade/downgrade their advertising package)"""
+        self.customer_rank = new_rank

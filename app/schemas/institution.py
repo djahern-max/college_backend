@@ -1,8 +1,9 @@
 # app/schemas/institution.py
 from pydantic import BaseModel, Field, validator
-from typing import Optional
+from typing import Optional, List
 from enum import Enum
 from datetime import datetime
+from pydantic import computed_field
 
 
 class ControlType(str, Enum):
@@ -113,22 +114,35 @@ class InstitutionBase(BaseModel):
         }
 
 
-class InstitutionCreate(InstitutionBase):
-    """Schema for creating a new institution"""
+class InstitutionCreate(BaseModel):
+    """Schema for creating new institutions - matches your database schema"""
 
-    ipeds_id: int = Field(..., gt=0, description="IPEDS UNITID (must be positive)")
+    ipeds_id: int = Field(..., description="IPEDS ID")
+    name: str = Field(..., min_length=1, max_length=255, description="Institution name")
+    city: str = Field(..., min_length=1, max_length=100, description="City")
+    state: str = Field(..., min_length=2, max_length=2, description="State code")
+    control_type: ControlType = Field(..., description="Control type")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                **InstitutionBase.Config.json_schema_extra["example"],
-                "ipeds_id": 130794,
-            }
-        }
+    # Optional fields that match your database
+    address: Optional[str] = Field(None, max_length=500, description="Street address")
+    zip_code: Optional[str] = Field(None, max_length=10, description="ZIP code")
+    region: Optional[USRegion] = Field(None, description="US Region")
+    website: Optional[str] = Field(None, max_length=500, description="Website URL")
+    phone: Optional[str] = Field(None, max_length=20, description="Phone number")
+    president_name: Optional[str] = Field(
+        None, max_length=255, description="President name"
+    )
+    president_title: Optional[str] = Field(
+        None, max_length=100, description="President title"
+    )
+    size_category: Optional[SizeCategory] = Field(None, description="Size category")
+    customer_rank: Optional[int] = Field(
+        None, ge=0, le=100, description="Customer ranking"
+    )
 
 
 class InstitutionUpdate(BaseModel):
-    """Schema for updating an institution - all fields optional"""
+    """Schema for updating institutions - matches your database schema"""
 
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     address: Optional[str] = Field(None, max_length=500)
@@ -137,23 +151,13 @@ class InstitutionUpdate(BaseModel):
     zip_code: Optional[str] = Field(None, max_length=10)
     region: Optional[USRegion] = None
     website: Optional[str] = Field(None, max_length=500)
-    phone: Optional[str] = None
+    phone: Optional[str] = Field(None, max_length=20)
     president_name: Optional[str] = Field(None, max_length=255)
     president_title: Optional[str] = Field(None, max_length=100)
     control_type: Optional[ControlType] = None
     size_category: Optional[SizeCategory] = None
-    # Image fields for updates
-    primary_image_url: Optional[str] = Field(
-        None, max_length=500, description="CDN URL to primary image"
-    )
-    primary_image_quality_score: Optional[int] = Field(
-        None, ge=0, le=100, description="Image quality score 0-100"
-    )
-    logo_image_url: Optional[str] = Field(
-        None, max_length=500, description="CDN URL to logo image"
-    )
-    image_extraction_status: Optional[ImageExtractionStatus] = Field(
-        None, description="Image extraction status"
+    customer_rank: Optional[int] = Field(
+        None, ge=0, le=100, description="Customer ranking"
     )
 
     @validator("state")
@@ -175,98 +179,137 @@ class InstitutionUpdate(BaseModel):
         return v if v and v != "https://" else None
 
 
-class InstitutionResponse(InstitutionBase):
-    """Schema for API responses - includes all base fields plus database metadata"""
+class CustomerRankUpdate(BaseModel):
+    """Schema for updating customer rank only"""
 
-    id: int = Field(..., description="Database ID")
-    ipeds_id: int = Field(..., description="IPEDS UNITID")
+    customer_rank: int = Field(..., ge=0, le=100, description="New customer ranking")
 
-    # Image fields
-    primary_image_url: Optional[str] = Field(
-        None, description="CDN URL to standardized 400x300px image"
-    )
+
+class InstitutionResponse(BaseModel):
+    """Schema for institution API responses with customer ranking"""
+
+    id: int = Field(..., description="Unique institution ID")
+    ipeds_id: int = Field(..., description="IPEDS ID")
+    name: str = Field(..., description="Institution name")
+    address: Optional[str] = Field(None, description="Street address")
+    city: str = Field(..., description="City")
+    state: str = Field(..., description="State code")
+    zip_code: Optional[str] = Field(None, description="ZIP code")
+    region: Optional[USRegion] = Field(None, description="US Region")
+    website: Optional[str] = Field(None, description="Website URL")
+    phone: Optional[str] = Field(None, description="Phone number")
+    president_name: Optional[str] = Field(None, description="President name")
+    president_title: Optional[str] = Field(None, description="President title")
+    control_type: ControlType = Field(..., description="Control type")
+    size_category: Optional[SizeCategory] = Field(None, description="Size category")
+
+    # Image and ranking fields
+    primary_image_url: Optional[str] = Field(None, description="Primary image URL")
     primary_image_quality_score: Optional[int] = Field(
-        None, description="Image quality score 0-100"
+        None, ge=0, le=100, description="Image quality score"
     )
-    logo_image_url: Optional[str] = Field(None, description="CDN URL to school logo")
+    customer_rank: Optional[int] = Field(
+        None,
+        description="Customer ranking for advertising priority (higher = better placement)",
+    )
+    logo_image_url: Optional[str] = Field(None, description="Logo image URL")
     image_extraction_status: Optional[ImageExtractionStatus] = Field(
         None, description="Image extraction status"
     )
     image_extraction_date: Optional[datetime] = Field(
-        None, description="When images were last processed"
+        None, description="When images were last extracted/updated"
     )
 
-    # Computed properties for response
-    full_address: Optional[str] = Field(None, description="Formatted full address")
-    display_name: str = Field(..., description="Institution name with location")
-    is_public: bool = Field(..., description="Whether institution is public")
-    is_private: bool = Field(..., description="Whether institution is private")
-    display_image_url: Optional[str] = Field(
-        None, description="Best available image URL for display"
-    )
-    has_high_quality_image: bool = Field(
-        False, description="Whether institution has high-quality image (80+ score)"
-    )
-    has_good_image: bool = Field(
-        False, description="Whether institution has good image (60+ score)"
-    )
-    image_needs_attention: bool = Field(
-        False, description="Whether image needs manual review"
-    )
+    # Computed fields for frontend convenience
+    @computed_field
+    @property
+    def display_name(self) -> str:
+        """Formatted display name"""
+        return self.name
+
+    @computed_field
+    @property
+    def display_image_url(self) -> Optional[str]:
+        """Best available image URL for display"""
+        return self.primary_image_url
+
+    @computed_field
+    @property
+    def full_address(self) -> str:
+        """Full address string"""
+        return f"{self.city}, {self.state}"
+
+    @computed_field
+    @property
+    def has_high_quality_image(self) -> bool:
+        """Whether institution has high quality image"""
+        return (
+            self.primary_image_quality_score is not None
+            and self.primary_image_quality_score >= 80
+        )
+
+    @computed_field
+    @property
+    def has_good_image(self) -> bool:
+        """Whether institution has good quality image"""
+        return (
+            self.primary_image_quality_score is not None
+            and self.primary_image_quality_score >= 60
+        )
+
+    @computed_field
+    @property
+    def is_premium_customer(self) -> bool:
+        """Whether institution is a premium advertising customer"""
+        return self.customer_rank is not None and self.customer_rank >= 80
+
+    @computed_field
+    @property
+    def is_public(self) -> bool:
+        """Whether institution is public"""
+        return self.control_type == ControlType.PUBLIC
+
+    @computed_field
+    @property
+    def is_private(self) -> bool:
+        """Whether institution is private"""
+        return self.control_type in [
+            ControlType.PRIVATE_NONPROFIT,
+            ControlType.PRIVATE_FOR_PROFIT,
+        ]
 
     class Config:
         from_attributes = True
         json_schema_extra = {
             "example": {
                 "id": 1,
-                "ipeds_id": 130794,
-                "name": "University of New Hampshire",
+                "ipeds_id": 100654,
+                "name": "University of New Hampshire-Main Campus",
                 "address": "105 Main Street",
                 "city": "Durham",
                 "state": "NH",
                 "zip_code": "03824",
-                "region": "new_england",
-                "website": "https://www.unh.edu",
+                "region": "NEW_ENGLAND",
+                "website": "https://unh.edu",
+                "phone": "(603) 862-1234",
                 "president_name": "James W. Dean Jr.",
                 "president_title": "President",
                 "control_type": "public",
                 "size_category": "large",
-                "primary_image_url": "https://magicscholar-images.nyc3.digitaloceanspaces.com/primary/unh_campus.jpg",
+                "primary_image_url": "https://example.com/unh_campus.jpg",
                 "primary_image_quality_score": 85,
-                "logo_image_url": "https://magicscholar-images.nyc3.digitaloceanspaces.com/logos/unh_logo.jpg",
-                "image_extraction_status": "success",
-                "image_extraction_date": "2024-01-15T10:30:00",
-                "full_address": "105 Main Street, Durham, NH, 03824",
-                "display_name": "University of New Hampshire (Durham, NH)",
-                "is_public": True,
-                "is_private": False,
-                "display_image_url": "https://magicscholar-images.nyc3.digitaloceanspaces.com/primary/unh_campus.jpg",
+                "customer_rank": 90,  # Premium customer
+                "logo_image_url": "https://example.com/unh_logo.jpg",
+                "image_extraction_status": "SUCCESS",
+                "image_extraction_date": "2024-09-09T12:00:00",
+                "display_name": "University of New Hampshire-Main Campus",
+                "display_image_url": "https://example.com/unh_campus.jpg",
+                "full_address": "Durham, NH",
                 "has_high_quality_image": True,
                 "has_good_image": True,
-                "image_needs_attention": False,
-            }
-        }
-
-
-class InstitutionList(BaseModel):
-    """Schema for paginated institution lists"""
-
-    institutions: list[InstitutionResponse]
-    total: int = Field(..., description="Total number of institutions")
-    page: int = Field(..., description="Current page number")
-    per_page: int = Field(..., description="Items per page")
-    total_pages: int = Field(..., description="Total number of pages")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "institutions": [
-                    InstitutionResponse.Config.json_schema_extra["example"]
-                ],
-                "total": 6163,
-                "page": 1,
-                "per_page": 50,
-                "total_pages": 124,
+                "is_premium_customer": True,
+                "is_public": True,
+                "is_private": False,
             }
         }
 
@@ -300,12 +343,9 @@ class InstitutionSearch(BaseModel):
             "example": {
                 "name": "University",
                 "state": "NH",
-                "region": "new_england",
                 "control_type": "public",
-                "size_category": "large",
                 "min_image_quality": 60,
                 "has_image": True,
-                "image_status": "success",
             }
         }
 
@@ -313,28 +353,14 @@ class InstitutionSearch(BaseModel):
 class ImageUpdateRequest(BaseModel):
     """Schema for updating institution image information"""
 
-    primary_image_url: str = Field(
-        ..., max_length=500, description="CDN URL to primary image"
+    primary_image_url: Optional[str] = Field(None, description="Primary image URL")
+    primary_image_quality_score: Optional[int] = Field(
+        None, ge=0, le=100, description="Image quality score"
     )
-    primary_image_quality_score: int = Field(
-        ..., ge=0, le=100, description="Image quality score 0-100"
+    logo_image_url: Optional[str] = Field(None, description="Logo image URL")
+    image_extraction_status: Optional[ImageExtractionStatus] = Field(
+        None, description="Image extraction status"
     )
-    logo_image_url: Optional[str] = Field(
-        None, max_length=500, description="CDN URL to logo image"
-    )
-    image_extraction_status: ImageExtractionStatus = Field(
-        ImageExtractionStatus.SUCCESS, description="Image extraction status"
-    )
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "primary_image_url": "https://magicscholar-images.nyc3.digitaloceanspaces.com/primary/school_image.jpg",
-                "primary_image_quality_score": 85,
-                "logo_image_url": "https://magicscholar-images.nyc3.digitaloceanspaces.com/logos/school_logo.jpg",
-                "image_extraction_status": "success",
-            }
-        }
 
 
 class InstitutionImageStats(BaseModel):
@@ -342,26 +368,34 @@ class InstitutionImageStats(BaseModel):
 
     total_institutions: int
     with_images: int
-    with_high_quality_images: int  # 80+ score
-    with_good_images: int  # 60+ score
+    with_high_quality_images: int
+    with_good_images: int
     needs_review: int
-    by_status: dict[str, int]
+    by_status: dict
     avg_quality_score: Optional[float]
+
+
+class InstitutionList(BaseModel):
+    """Schema for paginated institution lists"""
+
+    institutions: List[InstitutionResponse]
+    total: int = Field(..., description="Total number of institutions")
+    page: int = Field(..., description="Current page number")
+    per_page: int = Field(..., description="Items per page")
+    total_pages: int = Field(..., description="Total number of pages")
 
     class Config:
         json_schema_extra = {
             "example": {
-                "total_institutions": 6163,
-                "with_images": 4200,
-                "with_high_quality_images": 1500,
-                "with_good_images": 3200,
-                "needs_review": 450,
-                "by_status": {
-                    "success": 4200,
-                    "failed": 300,
-                    "needs_review": 450,
-                    "pending": 1213,
-                },
-                "avg_quality_score": 68.5,
+                "institutions": [
+                    # Would contain InstitutionResponse objects
+                ],
+                "total": 6163,
+                "page": 1,
+                "per_page": 50,
+                "total_pages": 124,
             }
         }
+
+
+from typing import List
