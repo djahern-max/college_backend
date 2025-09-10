@@ -10,6 +10,7 @@ from .user import User
 from .profile import UserProfile
 from .oauth import OAuthAccount, OAuthState
 from .institution import Institution
+from .s2023_is import S2023_IS
 
 
 # Import other models as they're created:
@@ -22,4 +23,5 @@ __all__ = [
     "OAuthAccount",
     "OAuthState",
     "Institution",
+    "S2023_IS",
 ]

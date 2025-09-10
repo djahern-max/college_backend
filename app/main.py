@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.api.v1 import user, oauth, profiles, scholarships, institution
+from app.api.v1 import user, oauth, profiles, scholarships, institution, s2023_is
 from fastapi.routing import APIRoute
 from fastapi.responses import PlainTextResponse
 from app.api.v1.admin import images as admin_images
@@ -36,6 +36,7 @@ app.include_router(
 app.include_router(
     admin_images.router, prefix="/api/v1/admin/images", tags=["admin-images"]
 )
+app.include_router(s2023_is.router, prefix="/api/v1/s2023-is", tags=["s2023-is"])
 
 
 @app.get("/")
