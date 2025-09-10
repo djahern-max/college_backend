@@ -36,7 +36,7 @@ app.include_router(
 app.include_router(
     admin_images.router, prefix="/api/v1/admin/images", tags=["admin-images"]
 )
-app.include_router(s2023_is.router, prefix="/api/v1/s2023-is", tags=["s2023-is"])
+app.include_router(s2023_is.router, prefix="/api/v1", tags=["s2023-is"])
 
 
 @app.get("/")

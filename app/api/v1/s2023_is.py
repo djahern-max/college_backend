@@ -8,7 +8,7 @@ from app.models.s2023_is import S2023_IS
 import tempfile
 import os
 
-router = APIRouter(prefix="/s2023-is", tags=["S2023 Instructional Staff"])
+router = APIRouter()
 
 
 @router.get("/institution/{unitid}")

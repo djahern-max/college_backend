@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from pydantic import ValidationError
 from typing import Optional, List
+from sqlalchemy import or_
 
 from app.core.database import get_db
 from app.models.institution import Institution
@@ -249,4 +250,33 @@ async def bulk_update_customer_ranks(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to bulk update customer ranks: {str(e)}",
+        )
+
+
+@router.get("/search", response_model=InstitutionList)
+async def search_institutions(
+    query: str = Query(..., min_length=1),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """Search institutions by name, city, or state with pagination"""
+    try:
+        service = InstitutionService(db)
+
+        search_params = InstitutionSearch(query=query)
+        institutions, total = service.search_institutions(search_params, page, per_page)
+
+        return InstitutionList(
+            institutions=institutions,
+            total=total,
+            page=page,
+            per_page=per_page,
+            total_pages=(total + per_page - 1) // per_page,
+        )
+    except Exception as e:
+        logger.error(f"Error searching institutions: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to search institutions: {str(e)}",
         )
