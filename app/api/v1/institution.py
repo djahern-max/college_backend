@@ -1,4 +1,4 @@
-# app/api/v1/institutions.py
+# app/api/v1/institution.py
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from pydantic import ValidationError
@@ -25,15 +25,13 @@ router = APIRouter()
 @router.get("/featured", response_model=List[InstitutionResponse])
 async def get_featured_institutions(
     limit: int = Query(20, ge=1, le=100),
-    offset: int = Query(0, ge=0),  # MAKE SURE THIS LINE EXISTS
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
     """Get featured institutions with best images for homepage with pagination support"""
     try:
         service = InstitutionService(db)
-        institutions = service.get_featured_institutions(
-            limit, offset
-        )  # PASS BOTH PARAMETERS
+        institutions = service.get_featured_institutions(limit, offset)
         return institutions
     except Exception as e:
         logger.error(f"Error getting featured institutions: {str(e)}")
@@ -43,6 +41,164 @@ async def get_featured_institutions(
         )
 
 
+@router.get("/search", response_model=InstitutionList)
+async def search_institutions(
+    query: str = Query(..., min_length=1),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """Search institutions by name, city, or state with pagination"""
+    try:
+        service = InstitutionService(db)
+
+        search_params = InstitutionSearch(query=query)
+        institutions, total = service.search_institutions(search_params, page, per_page)
+
+        return InstitutionList(
+            institutions=institutions,
+            total=total,
+            page=page,
+            per_page=per_page,
+            total_pages=(total + per_page - 1) // per_page,
+        )
+    except Exception as e:
+        logger.error(f"Error searching institutions: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to search institutions: {str(e)}",
+        )
+
+
+@router.get("/by-priority", response_model=List[InstitutionResponse])
+async def get_institutions_by_priority(
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """Get institutions ordered by customer priority (for admin dashboard)"""
+    try:
+        service = InstitutionService(db)
+        institutions = service.get_institutions_by_customer_priority(limit, offset)
+        return [InstitutionResponse.model_validate(inst) for inst in institutions]
+
+    except Exception as e:
+        logger.error(f"Error getting institutions by priority: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get institutions by priority: {str(e)}",
+        )
+
+
+@router.get("/", response_model=InstitutionList)
+async def list_institutions(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=100),
+    min_image_quality: Optional[int] = Query(None, ge=0, le=100),
+    db: Session = Depends(get_db),
+):
+    """Get institutions ordered by image quality (best first)"""
+    try:
+        service = InstitutionService(db)
+
+        search_params = InstitutionSearch(min_image_quality=min_image_quality)
+        institutions, total = service.search_institutions(search_params, page, per_page)
+
+        return InstitutionList(
+            institutions=institutions,
+            total=total,
+            page=page,
+            per_page=per_page,
+            total_pages=(total + per_page - 1) // per_page,
+        )
+    except Exception as e:
+        logger.error(f"Error listing institutions: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list institutions: {str(e)}",
+        )
+
+
+@router.post("/bulk-update-ranks")
+async def bulk_update_customer_ranks(
+    updates: List[dict],  # [{"institution_id": 1, "customer_rank": 95}, ...]
+    db: Session = Depends(get_db),
+):
+    """Bulk update customer ranks for multiple institutions"""
+    try:
+        service = InstitutionService(db)
+        updated_count = 0
+        failed_count = 0
+        errors = []
+
+        for update in updates:
+            try:
+                institution_id = update.get("institution_id")
+                customer_rank = update.get("customer_rank")
+
+                if institution_id is None or customer_rank is None:
+                    failed_count += 1
+                    errors.append(
+                        f"Missing institution_id or customer_rank in update: {update}"
+                    )
+                    continue
+
+                result = service.update_customer_rank(institution_id, customer_rank)
+                if result:
+                    updated_count += 1
+                else:
+                    failed_count += 1
+                    errors.append(f"Institution {institution_id} not found")
+
+            except Exception as e:
+                failed_count += 1
+                errors.append(f"Error updating institution {institution_id}: {str(e)}")
+
+        return {
+            "message": f"Bulk update completed: {updated_count} successful, {failed_count} failed",
+            "updated_count": updated_count,
+            "failed_count": failed_count,
+            "errors": errors,
+        }
+
+    except Exception as e:
+        logger.error(f"Error in bulk customer rank update: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to bulk update customer ranks: {str(e)}",
+        )
+
+
+@router.put("/{institution_id}/customer-rank", response_model=InstitutionResponse)
+async def update_customer_rank(
+    institution_id: int, rank_update: CustomerRankUpdate, db: Session = Depends(get_db)
+):
+    """Update customer ranking for an institution (for advertising tier changes)"""
+    try:
+        service = InstitutionService(db)
+        institution = service.update_customer_rank(
+            institution_id, rank_update.customer_rank
+        )
+
+        if not institution:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Institution with ID {institution_id} not found",
+            )
+
+        return InstitutionResponse.model_validate(institution)
+
+    except Exception as e:
+        logger.error(
+            f"Error updating customer rank for institution {institution_id}: {str(e)}"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update customer rank: {str(e)}",
+        )
+
+
+# MOVED TO THE END: This route must come last because it catches all /{institution_id}
 @router.get("/{institution_id}", response_model=InstitutionResponse)
 async def get_institution_by_id(institution_id: int, db: Session = Depends(get_db)):
     """Get institution by ID with complete image information"""
@@ -122,161 +278,4 @@ async def get_institution_by_id(institution_id: int, db: Session = Depends(get_d
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get institution: {str(e)}",
-        )
-
-
-@router.get("/", response_model=InstitutionList)
-async def list_institutions(
-    page: int = Query(1, ge=1),
-    per_page: int = Query(50, ge=1, le=100),
-    min_image_quality: Optional[int] = Query(None, ge=0, le=100),
-    db: Session = Depends(get_db),
-):
-    """Get institutions ordered by image quality (best first)"""
-    try:
-        service = InstitutionService(db)
-
-        search_params = InstitutionSearch(min_image_quality=min_image_quality)
-        institutions, total = service.search_institutions(search_params, page, per_page)
-
-        return InstitutionList(
-            institutions=institutions,
-            total=total,
-            page=page,
-            per_page=per_page,
-            total_pages=(total + per_page - 1) // per_page,
-        )
-    except Exception as e:
-        logger.error(f"Error listing institutions: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list institutions: {str(e)}",
-        )
-
-
-@router.put("/{institution_id}/customer-rank", response_model=InstitutionResponse)
-async def update_customer_rank(
-    institution_id: int, rank_update: CustomerRankUpdate, db: Session = Depends(get_db)
-):
-    """Update customer ranking for an institution (for advertising tier changes)"""
-    try:
-        service = InstitutionService(db)
-        institution = service.update_customer_rank(
-            institution_id, rank_update.customer_rank
-        )
-
-        if not institution:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Institution with ID {institution_id} not found",
-            )
-
-        return InstitutionResponse.model_validate(institution)
-
-    except Exception as e:
-        logger.error(
-            f"Error updating customer rank for institution {institution_id}: {str(e)}"
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update customer rank: {str(e)}",
-        )
-
-
-@router.get("/by-priority", response_model=List[InstitutionResponse])
-async def get_institutions_by_priority(
-    limit: int = Query(50, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
-):
-    """Get institutions ordered by customer priority (for admin dashboard)"""
-    try:
-        service = InstitutionService(db)
-        institutions = service.get_institutions_by_customer_priority(limit, offset)
-        return [InstitutionResponse.model_validate(inst) for inst in institutions]
-
-    except Exception as e:
-        logger.error(f"Error getting institutions by priority: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get institutions by priority: {str(e)}",
-        )
-
-
-@router.post("/bulk-update-ranks")
-async def bulk_update_customer_ranks(
-    updates: List[dict],  # [{"institution_id": 1, "customer_rank": 95}, ...]
-    db: Session = Depends(get_db),
-):
-    """Bulk update customer ranks for multiple institutions"""
-    try:
-        service = InstitutionService(db)
-        updated_count = 0
-        failed_count = 0
-        errors = []
-
-        for update in updates:
-            try:
-                institution_id = update.get("institution_id")
-                customer_rank = update.get("customer_rank")
-
-                if institution_id is None or customer_rank is None:
-                    failed_count += 1
-                    errors.append(
-                        f"Missing institution_id or customer_rank in update: {update}"
-                    )
-                    continue
-
-                result = service.update_customer_rank(institution_id, customer_rank)
-                if result:
-                    updated_count += 1
-                else:
-                    failed_count += 1
-                    errors.append(f"Institution {institution_id} not found")
-
-            except Exception as e:
-                failed_count += 1
-                errors.append(f"Error updating institution {institution_id}: {str(e)}")
-
-        return {
-            "message": f"Bulk update completed: {updated_count} successful, {failed_count} failed",
-            "updated_count": updated_count,
-            "failed_count": failed_count,
-            "errors": errors,
-        }
-
-    except Exception as e:
-        logger.error(f"Error in bulk customer rank update: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to bulk update customer ranks: {str(e)}",
-        )
-
-
-@router.get("/search", response_model=InstitutionList)
-async def search_institutions(
-    query: str = Query(..., min_length=1),
-    page: int = Query(1, ge=1),
-    per_page: int = Query(50, ge=1, le=100),
-    db: Session = Depends(get_db),
-):
-    """Search institutions by name, city, or state with pagination"""
-    try:
-        service = InstitutionService(db)
-
-        search_params = InstitutionSearch(query=query)
-        institutions, total = service.search_institutions(search_params, page, per_page)
-
-        return InstitutionList(
-            institutions=institutions,
-            total=total,
-            page=page,
-            per_page=per_page,
-            total_pages=(total + per_page - 1) // per_page,
-        )
-    except Exception as e:
-        logger.error(f"Error searching institutions: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to search institutions: {str(e)}",
         )
