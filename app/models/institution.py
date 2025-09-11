@@ -13,13 +13,11 @@ from sqlalchemy import (
     or_,
     func,
 )
-from sqlalchemy.sql import func
+from sqlalchemy.orm import Session, relationship
 from app.core.database import Base
 from enum import Enum
 from datetime import datetime
-from typing import Optional
-from sqlalchemy.orm import Session, relationship
-from typing import List
+from typing import Optional, List
 
 
 class ControlType(str, Enum):
@@ -142,23 +140,6 @@ class Institution(Base):
     )
     image_extraction_status = Column(
         SQLEnum(ImageExtractionStatus),
-        nullable=True,
-        comment="Status of image extraction process",
-        index=True,
-    )
-    image_extraction_date = Column(
-        DateTime,
-        nullable=True,
-        comment="When images were last extracted/updated",
-    )
-
-    logo_image_url = Column(
-        String(500),
-        nullable=True,
-        comment="CDN URL to school logo for headers/search results",
-    )
-    image_extraction_status = Column(
-        SQLEnum(ImageExtractionStatus),
         default=ImageExtractionStatus.PENDING,
         index=True,
         comment="Status of image extraction process",
@@ -167,9 +148,28 @@ class Institution(Base):
         DateTime, nullable=True, comment="When images were last extracted/updated"
     )
 
+    # ===========================
+    # TIMESTAMPS
+    # ===========================
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    # ===========================
+    # RELATIONSHIPS
+    # ===========================
+
+    step2_financial_data = relationship(
+        "Step2_IC2023_AY", back_populates="institution", uselist=False
+    )
+
     def __repr__(self):
         return f"<Institution(id={self.id}, name='{self.name}', state='{self.state}')>"
 
+    # ===========================
+    # COMPUTED PROPERTIES
+    # ===========================
     @property
     def full_address(self) -> str:
         """Return formatted full address"""
@@ -257,6 +257,9 @@ class Institution(Base):
         else:
             return f"{base_url}general_institution.jpg"
 
+    # ===========================
+    # INSTANCE METHODS
+    # ===========================
     def update_image_info(
         self,
         image_url: str,
@@ -272,28 +275,39 @@ class Institution(Base):
         self.image_extraction_status = status
         self.image_extraction_date = datetime.utcnow()
 
+    def update_customer_rank(self, new_rank: int) -> None:
+        """Update customer ranking (for when they upgrade/downgrade their advertising package)"""
+        self.customer_rank = new_rank
+
+    # ===========================
+    # CLASS METHODS FOR QUERIES
+    # ===========================
     @classmethod
-    def get_by_image_quality(cls, session, limit: int = 50, min_score: int = 60):
+    def get_by_image_quality(
+        cls, session: Session, limit: int = 50, min_score: int = 60
+    ) -> List["Institution"]:
         """Get institutions ordered by image quality for featured display"""
         return (
             session.query(cls)
             .filter(cls.primary_image_quality_score >= min_score)
-            .order_by(cls.primary_image_quality_score.desc())
+            .order_by(desc(cls.primary_image_quality_score))
             .limit(limit)
             .all()
         )
 
     @classmethod
-    def get_needing_image_review(cls, session):
+    def get_needing_image_review(cls, session: Session) -> List["Institution"]:
         """Get institutions that need manual image review"""
         return (
             session.query(cls)
             .filter(
-                (cls.image_extraction_status == ImageExtractionStatus.NEEDS_REVIEW)
-                | (cls.image_extraction_status == ImageExtractionStatus.FAILED)
-                | (cls.primary_image_quality_score < 40)
+                or_(
+                    cls.image_extraction_status == ImageExtractionStatus.NEEDS_REVIEW,
+                    cls.image_extraction_status == ImageExtractionStatus.FAILED,
+                    cls.primary_image_quality_score < 40,
+                )
             )
-            .order_by(cls.primary_image_quality_score.desc())
+            .order_by(desc(cls.primary_image_quality_score))
             .all()
         )
 
@@ -337,6 +351,13 @@ class Institution(Base):
             .all()
         )
 
-    def update_customer_rank(self, new_rank: int) -> None:
-        """Update customer ranking (for when they upgrade/downgrade their advertising package)"""
-        self.customer_rank = new_rank
+    # ===========================
+    # TABLE CONSTRAINTS & INDEXES
+    # ===========================
+    __table_args__ = (
+        Index("idx_institution_name", "name"),
+        Index("idx_institution_state_city", "state", "city"),
+        Index("idx_institution_control_size", "control_type", "size_category"),
+        Index("idx_institution_image_quality", "primary_image_quality_score"),
+        Index("idx_institution_customer_rank", "customer_rank"),
+    )
