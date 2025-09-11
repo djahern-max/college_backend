@@ -18,14 +18,16 @@ from typing import Optional
 
 class Step2_IC2023_AY(Base):
     """
-    Step 2: Financial Data from IC2023_AY 
+    Step 2: Financial Data from IC2023_AY
     Tuition, fees, room & board, and related costs
     """
 
     __tablename__ = "step2_ic2023_ay"
 
     id = Column(Integer, primary_key=True, index=True)
-    ipeds_id = Column(Integer, ForeignKey("institutions.ipeds_id"), nullable=False, index=True)
+    ipeds_id = Column(
+        Integer, ForeignKey("institutions.ipeds_id"), nullable=False, index=True
+    )
 
     academic_year = Column(String(10), nullable=False, default="2023-24")
     data_source = Column(String(50), nullable=False, default="IC2023_AY")
@@ -48,7 +50,9 @@ class Step2_IC2023_AY(Base):
     validation_status = Column(String(20), default="pending")
 
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
+    )
 
     institution = relationship("Institution", back_populates="step2_financial_data")
 
@@ -63,7 +67,7 @@ class Step2_IC2023_AY(Base):
             self.room_board_on_campus,
             self.books_supplies,
             self.personal_expenses,
-            self.transportation
+            self.transportation,
         ]
         valid_costs = [cost for cost in costs if cost is not None]
         return sum(valid_costs) if valid_costs else None
@@ -76,7 +80,7 @@ class Step2_IC2023_AY(Base):
             self.room_board_on_campus,
             self.books_supplies,
             self.personal_expenses,
-            self.transportation
+            self.transportation,
         ]
         valid_costs = [cost for cost in costs if cost is not None]
         return sum(valid_costs) if valid_costs else None
@@ -84,12 +88,28 @@ class Step2_IC2023_AY(Base):
     @property
     def has_comprehensive_data(self) -> bool:
         return (
-            self.tuition_in_state is not None and
-            self.tuition_out_state is not None and
-            self.room_board_on_campus is not None
+            self.tuition_in_state is not None
+            and self.tuition_out_state is not None
+            and self.room_board_on_campus is not None
         )
 
     def to_dict(self) -> dict:
+        """Convert model instance to dictionary for API responses"""
+
+        # Create cost breakdown for display
+        cost_breakdown = {
+            "tuition_in_state": self.tuition_in_state,
+            "tuition_out_state": self.tuition_out_state,
+            "required_fees": self.required_fees,
+            "tuition_fees_in_state": self.tuition_fees_in_state,
+            "tuition_fees_out_state": self.tuition_fees_out_state,
+            "room_board_on_campus": self.room_board_on_campus,
+            "room_board_off_campus": self.room_board_off_campus,
+            "books_supplies": self.books_supplies,
+            "personal_expenses": self.personal_expenses,
+            "transportation": self.transportation,
+        }
+
         return {
             "id": self.id,
             "ipeds_id": self.ipeds_id,
@@ -112,6 +132,7 @@ class Step2_IC2023_AY(Base):
             "data_completeness_score": self.data_completeness_score,
             "validation_status": self.validation_status,
             "has_comprehensive_data": self.has_comprehensive_data,
+            "cost_breakdown": cost_breakdown,  # Added this field
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }

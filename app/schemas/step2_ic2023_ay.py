@@ -1,7 +1,6 @@
 # app/schemas/step2_ic2023_ay.py
 """
-Pydantic schemas for Step2_IC2023_AY financial data
-Following the same naming convention as S2023_IS schemas
+Fixed Pydantic schemas for Step2_IC2023_AY financial data
 """
 
 from pydantic import BaseModel, Field, validator
@@ -14,6 +13,7 @@ class ValidationStatus(str, Enum):
     PENDING = "pending"
     VALID = "valid"
     ISSUES = "issues"
+    CLEAN = "clean"  # Added this to match your data
 
 
 class Step2_IC2023_AYBase(BaseModel):
@@ -68,18 +68,34 @@ class Step2_IC2023_AYBase(BaseModel):
     )
     validation_issues: Optional[str] = Field(None, description="Any validation issues")
 
-    @validator("tuition_fees_in_state")
-    def validate_tuition_fees_in_state(cls, v, values):
-        """Validate that tuition + fees makes sense"""
-        if v is not None:
-            tuition = values.get("tuition_in_state")
-            fees = values.get("required_fees")
-            if tuition is not None and fees is not None:
-                expected = tuition + fees
-                if abs(v - expected) > 100:  # Allow $100 tolerance
-                    # This is a warning, not an error - data might be structured differently
-                    pass
-        return v
+
+class Step2_IC2023_AYResponse(Step2_IC2023_AYBase):
+    """Schema for Step2_IC2023_AY API responses"""
+
+    id: int = Field(..., description="Database record ID")
+
+    # Computed fields
+    total_cost_in_state: Optional[float] = Field(
+        None, description="Total cost for in-state students"
+    )
+    total_cost_out_state: Optional[float] = Field(
+        None, description="Total cost for out-of-state students"
+    )
+    has_comprehensive_data: bool = Field(
+        False, description="Has comprehensive financial data"
+    )
+
+    # Cost breakdown for display - MADE OPTIONAL
+    cost_breakdown: Optional[Dict[str, Optional[float]]] = Field(
+        None, description="Breakdown of all costs"
+    )
+
+    # Timestamps
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 class Step2_IC2023_AYCreate(Step2_IC2023_AYBase):
@@ -106,35 +122,6 @@ class Step2_IC2023_AYUpdate(BaseModel):
     data_completeness_score: Optional[int] = Field(None, ge=0, le=100)
     validation_status: Optional[ValidationStatus] = None
     validation_issues: Optional[str] = None
-
-
-class Step2_IC2023_AYResponse(Step2_IC2023_AYBase):
-    """Schema for Step2_IC2023_AY API responses"""
-
-    id: int = Field(..., description="Database record ID")
-
-    # Computed fields
-    total_cost_in_state: Optional[float] = Field(
-        None, description="Total cost for in-state students"
-    )
-    total_cost_out_state: Optional[float] = Field(
-        None, description="Total cost for out-of-state students"
-    )
-    has_comprehensive_data: bool = Field(
-        False, description="Has comprehensive financial data"
-    )
-
-    # Cost breakdown for display
-    cost_breakdown: Dict[str, Optional[float]] = Field(
-        ..., description="Breakdown of all costs"
-    )
-
-    # Timestamps
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class Step2_IC2023_AYSummary(BaseModel):
@@ -213,10 +200,10 @@ class Step2_IC2023_AYStats(BaseModel):
         None, description="Average total cost out-of-state"
     )
     cost_ranges: Dict[str, Dict[str, float]] = Field(
-        ..., description="Cost ranges by percentile"
+        default_factory=dict, description="Cost ranges by percentile"
     )
     validation_breakdown: Dict[str, int] = Field(
-        ..., description="Count by validation status"
+        default_factory=dict, description="Count by validation status"
     )
 
 
@@ -232,16 +219,6 @@ class Step2_IC2023_AYList(BaseModel):
     total_pages: int = Field(..., description="Total number of pages")
     has_next: bool = Field(..., description="Whether there are more pages")
     has_prev: bool = Field(..., description="Whether there are previous pages")
-
-
-class Step2_IC2023_AYImportResponse(BaseModel):
-    """Schema for CSV import response"""
-
-    message: str = Field(..., description="Import status message")
-    records_imported: int = Field(..., description="Number of records imported")
-    records_updated: int = Field(0, description="Number of records updated")
-    records_failed: int = Field(0, description="Number of records that failed")
-    errors: Optional[List[str]] = Field(None, description="List of import errors")
 
 
 class InstitutionWithFinancialData(BaseModel):
@@ -265,15 +242,4 @@ class InstitutionWithFinancialData(BaseModel):
     )
     financial_summary: Optional[str] = Field(
         None, description="Brief financial summary"
-    )
-
-
-class Step2_IC2023_AYBulkCreate(BaseModel):
-    """Schema for bulk creating Step2_IC2023_AY records"""
-
-    records: List[Step2_IC2023_AYCreate] = Field(
-        ..., description="List of records to create"
-    )
-    replace_existing: bool = Field(
-        False, description="Whether to replace existing records"
     )
