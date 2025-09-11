@@ -185,7 +185,19 @@ class InstitutionService:
         try:
             query = self.db.query(Institution)
 
-            # Apply search filters
+            # Apply generic search query (searches across name, city, state)
+            if search_params.query:
+                search_term = f"%{search_params.query}%"
+                query = query.filter(
+                    or_(
+                        Institution.name.ilike(search_term),
+                        Institution.city.ilike(search_term),
+                        Institution.state.ilike(search_term),
+                        Institution.display_name.ilike(search_term),
+                    )
+                )
+
+            # Apply specific field filters (for advanced filtering)
             if search_params.name:
                 query = query.filter(Institution.name.ilike(f"%{search_params.name}%"))
 
@@ -226,12 +238,29 @@ class InstitutionService:
                     Institution.image_extraction_status == search_params.image_status
                 )
 
-            # FIXED: Correct SQL syntax - DESC comes before NULLS LAST
-            query = query.order_by(
-                desc(Institution.customer_rank).nulls_last(),
-                desc(Institution.primary_image_quality_score).nulls_last(),
-                Institution.name,
-            )
+            # ORDER BY: For search results, prioritize relevance over customer_rank
+            if search_params.query:
+                # For search queries, order by relevance (exact matches first)
+                # Then by customer rank, then by image quality
+                query = query.order_by(
+                    # Exact name matches first
+                    Institution.name.ilike(f"{search_params.query}").desc(),
+                    # Then partial name matches
+                    Institution.name.ilike(f"%{search_params.query}%").desc(),
+                    # Then by customer rank
+                    desc(Institution.customer_rank).nulls_last(),
+                    # Then by image quality
+                    desc(Institution.primary_image_quality_score).nulls_last(),
+                    # Finally by name
+                    Institution.name,
+                )
+            else:
+                # For non-search queries (browsing), order by customer_rank first
+                query = query.order_by(
+                    desc(Institution.customer_rank).nulls_last(),
+                    desc(Institution.primary_image_quality_score).nulls_last(),
+                    Institution.name,
+                )
 
             # Get total count before pagination
             total = query.count()

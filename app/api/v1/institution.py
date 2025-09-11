@@ -52,7 +52,11 @@ async def search_institutions(
     try:
         service = InstitutionService(db)
 
-        search_params = InstitutionSearch(query=query)
+        # FIXED: Create search params that actually search across name, city, state
+        # We'll search the query against all these fields
+        search_params = InstitutionSearch(
+            query=query  # Pass the raw query to be handled by the service
+        )
         institutions, total = service.search_institutions(search_params, page, per_page)
 
         return InstitutionList(

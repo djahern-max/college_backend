@@ -317,37 +317,27 @@ class InstitutionResponse(BaseModel):
 class InstitutionSearch(BaseModel):
     """Schema for institution search filters"""
 
+    # Generic search query (searches across name, city, state)
+    query: Optional[str] = Field(
+        None, description="Search across name, city, and state"
+    )
+
+    # Specific field searches (for advanced filtering)
     name: Optional[str] = Field(None, description="Search by institution name")
     state: Optional[str] = Field(None, description="Filter by state code")
     city: Optional[str] = Field(None, description="Filter by city")
-    region: Optional[USRegion] = Field(None, description="Filter by US region")
-    control_type: Optional[ControlType] = Field(
-        None, description="Filter by control type"
-    )
-    size_category: Optional[SizeCategory] = Field(
-        None, description="Filter by size category"
-    )
+    region: Optional[str] = Field(None, description="Filter by US region")
+    control_type: Optional[str] = Field(None, description="Filter by control type")
+    size_category: Optional[str] = Field(None, description="Filter by size category")
+
     # Image-based filters
     min_image_quality: Optional[int] = Field(
         None, ge=0, le=100, description="Minimum image quality score"
     )
-    has_image: Optional[bool] = Field(
-        None, description="Filter by whether institution has an image"
-    )
-    image_status: Optional[ImageExtractionStatus] = Field(
+    has_image: Optional[bool] = Field(None, description="Filter by image availability")
+    image_status: Optional[str] = Field(
         None, description="Filter by image extraction status"
     )
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "name": "University",
-                "state": "NH",
-                "control_type": "public",
-                "min_image_quality": 60,
-                "has_image": True,
-            }
-        }
 
 
 class ImageUpdateRequest(BaseModel):
