@@ -6,7 +6,6 @@ from sqlalchemy import func, or_, and_, desc
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 import logging
 from datetime import datetime
-from app.models.step2_ic2023_ay import Step2_IC2023_AY
 
 from app.models.institution import Institution, ImageExtractionStatus
 from app.schemas.institution import (
@@ -586,60 +585,26 @@ class InstitutionService:
     def get_featured_institutions(
         self, limit: int = 20, offset: int = 0
     ) -> List[Institution]:
-        """Get featured institutions with tuition-based ordering and fallback"""
+        """Get featured institutions with best images and pagination support"""
         try:
-            # First, try to get schools with complete tuition data
-            with_tuition = (
+            return (
                 self.db.query(Institution)
-                .join(Step2_IC2023_AY, Institution.ipeds_id == Step2_IC2023_AY.ipeds_id)
                 .filter(
                     and_(
                         Institution.primary_image_url.isnot(None),
-                        Institution.primary_image_quality_score >= 60,
-                        Institution.customer_rank.isnot(None),
-                        Step2_IC2023_AY.tuition_fees_in_state.isnot(None),
-                        Step2_IC2023_AY.tuition_fees_out_state.isnot(None),
-                        (
-                            Step2_IC2023_AY.tuition_fees_out_state
-                            - Step2_IC2023_AY.tuition_fees_in_state
-                        )
-                        > 100,
+                        Institution.primary_image_quality_score
+                        >= 60,  # Good quality threshold
                     )
                 )
                 .order_by(
-                    Institution.customer_rank.asc(),
-                    (
-                        Step2_IC2023_AY.tuition_fees_out_state
-                        - Step2_IC2023_AY.tuition_fees_in_state
-                    ).desc(),
+                    desc(Institution.customer_rank).nulls_last(),
+                    desc(Institution.primary_image_quality_score).nulls_last(),
+                    Institution.name,
                 )
+                .offset(offset)  # THIS IS KEY FOR PAGINATION
                 .limit(limit)
                 .all()
             )
-
-            # If we don't have enough results, add schools without complete tuition data
-            if len(with_tuition) < limit:
-                remaining = limit - len(with_tuition)
-                without_tuition = (
-                    self.db.query(Institution)
-                    .filter(
-                        and_(
-                            Institution.primary_image_url.isnot(None),
-                            Institution.primary_image_quality_score >= 60,
-                            Institution.customer_rank.isnot(None),
-                        )
-                    )
-                    .order_by(
-                        Institution.customer_rank.asc(),
-                        desc(Institution.primary_image_quality_score),
-                    )
-                    .limit(remaining)
-                    .all()
-                )
-                return with_tuition + without_tuition
-
-            return with_tuition
-
         except SQLAlchemyError as e:
             logger.error(f"Database error getting featured institutions: {str(e)}")
             raise Exception(f"Database error: {str(e)}")
