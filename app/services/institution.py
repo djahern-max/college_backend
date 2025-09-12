@@ -586,9 +586,10 @@ class InstitutionService:
     def get_featured_institutions(
         self, limit: int = 20, offset: int = 0
     ) -> List[Institution]:
-        """Get featured institutions ordered by customer rank, then tuition savings"""
+        """Get featured institutions with tuition-based ordering and fallback"""
         try:
-            return (
+            # First, try to get schools with complete tuition data
+            with_tuition = (
                 self.db.query(Institution)
                 .join(Step2_IC2023_AY, Institution.ipeds_id == Step2_IC2023_AY.ipeds_id)
                 .filter(
@@ -602,20 +603,43 @@ class InstitutionService:
                             Step2_IC2023_AY.tuition_fees_out_state
                             - Step2_IC2023_AY.tuition_fees_in_state
                         )
-                        > 500,
+                        > 100,
                     )
                 )
                 .order_by(
-                    Institution.customer_rank.asc(),  # Lower customer_rank first (2, 4, 5...)
+                    Institution.customer_rank.asc(),
                     (
                         Step2_IC2023_AY.tuition_fees_out_state
                         - Step2_IC2023_AY.tuition_fees_in_state
-                    ).desc(),  # Higher savings first
+                    ).desc(),
                 )
-                .offset(offset)
                 .limit(limit)
                 .all()
             )
+
+            # If we don't have enough results, add schools without complete tuition data
+            if len(with_tuition) < limit:
+                remaining = limit - len(with_tuition)
+                without_tuition = (
+                    self.db.query(Institution)
+                    .filter(
+                        and_(
+                            Institution.primary_image_url.isnot(None),
+                            Institution.primary_image_quality_score >= 60,
+                            Institution.customer_rank.isnot(None),
+                        )
+                    )
+                    .order_by(
+                        Institution.customer_rank.asc(),
+                        desc(Institution.primary_image_quality_score),
+                    )
+                    .limit(remaining)
+                    .all()
+                )
+                return with_tuition + without_tuition
+
+            return with_tuition
+
         except SQLAlchemyError as e:
             logger.error(f"Database error getting featured institutions: {str(e)}")
             raise Exception(f"Database error: {str(e)}")
