@@ -6,6 +6,7 @@ from sqlalchemy import func, or_, and_, desc
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 import logging
 from datetime import datetime
+from app.models.step2_ic2023_ay import Step2_IC2023_AY
 
 from app.models.institution import Institution, ImageExtractionStatus
 from app.schemas.institution import (
@@ -585,23 +586,33 @@ class InstitutionService:
     def get_featured_institutions(
         self, limit: int = 20, offset: int = 0
     ) -> List[Institution]:
-        """Get featured institutions with best images and pagination support"""
+        """Get featured institutions ordered by customer rank, then tuition savings"""
         try:
             return (
                 self.db.query(Institution)
+                .join(Step2_IC2023_AY, Institution.ipeds_id == Step2_IC2023_AY.ipeds_id)
                 .filter(
                     and_(
                         Institution.primary_image_url.isnot(None),
-                        Institution.primary_image_quality_score
-                        >= 60,  # Good quality threshold
+                        Institution.primary_image_quality_score >= 60,
+                        Institution.customer_rank.isnot(None),
+                        Step2_IC2023_AY.tuition_fees_in_state.isnot(None),
+                        Step2_IC2023_AY.tuition_fees_out_state.isnot(None),
+                        (
+                            Step2_IC2023_AY.tuition_fees_out_state
+                            - Step2_IC2023_AY.tuition_fees_in_state
+                        )
+                        > 500,
                     )
                 )
                 .order_by(
-                    desc(Institution.customer_rank).nulls_last(),
-                    desc(Institution.primary_image_quality_score).nulls_last(),
-                    Institution.name,
+                    Institution.customer_rank.asc(),  # Lower customer_rank first (2, 4, 5...)
+                    (
+                        Step2_IC2023_AY.tuition_fees_out_state
+                        - Step2_IC2023_AY.tuition_fees_in_state
+                    ).desc(),  # Higher savings first
                 )
-                .offset(offset)  # THIS IS KEY FOR PAGINATION
+                .offset(offset)
                 .limit(limit)
                 .all()
             )
