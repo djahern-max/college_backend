@@ -17,7 +17,9 @@ from sqlalchemy.sql import func
 from app.core.database import Base
 from enum import Enum
 from typing import List, Optional
+from datetime import datetime
 import logging
+from app.models.institution import ImageExtractionStatus
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +190,35 @@ class Scholarship(Base):
     employer_affiliation = Column(String(255), nullable=True)
 
     # ===========================
+    # IMAGE INFORMATION
+    # ===========================
+    primary_image_url = Column(
+        String(500),
+        nullable=True,
+        comment="CDN URL to standardized scholarship card image",
+    )
+    primary_image_quality_score = Column(
+        Integer,
+        nullable=True,
+        comment="Quality score 0-100 for ranking scholarships by image quality",
+        index=True,
+    )
+    logo_image_url = Column(
+        String(500), nullable=True, comment="CDN URL to organization logo"
+    )
+    image_extraction_status = Column(
+        SQLEnum(ImageExtractionStatus),
+        default=ImageExtractionStatus.PENDING,
+        index=True,
+        comment="Status of image extraction process",
+    )
+    image_extraction_date = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="When images were last extracted/updated",
+    )
+
+    # ===========================
     # METADATA & ADMINISTRATION
     # ===========================
     verified = Column(Boolean, default=False)  # Admin-verified scholarship
@@ -224,6 +255,68 @@ class Scholarship(Base):
 
     def __repr__(self):
         return f"<Scholarship(id={self.id}, title='{self.title}', organization='{self.organization}')>"
+
+    # ===========================
+    # IMAGE PROPERTIES & METHODS
+    # ===========================
+
+    @property
+    def display_image_url(self) -> Optional[str]:
+        """Return the best available image URL for display"""
+        if self.primary_image_url:
+            return self.primary_image_url
+        elif self.logo_image_url:
+            return self.logo_image_url
+        else:
+            return self._get_fallback_image_url()
+
+    def _get_fallback_image_url(self) -> str:
+        """Get fallback image based on scholarship characteristics"""
+        base_url = "https://magicscholar-images.nyc3.digitaloceanspaces.com/fallbacks/"
+
+        if self.scholarship_type == ScholarshipType.STEM:
+            return f"{base_url}stem_scholarship.jpg"
+        elif self.scholarship_type == ScholarshipType.ARTS:
+            return f"{base_url}arts_scholarship.jpg"
+        elif self.scholarship_type == ScholarshipType.ATHLETIC:
+            return f"{base_url}athletic_scholarship.jpg"
+        elif self.scholarship_type == ScholarshipType.DIVERSITY:
+            return f"{base_url}diversity_scholarship.jpg"
+        elif self.scholarship_type == ScholarshipType.NEED_BASED:
+            return f"{base_url}need_based_scholarship.jpg"
+        else:
+            return f"{base_url}general_scholarship.jpg"
+
+    @property
+    def has_high_quality_image(self) -> bool:
+        """Check if scholarship has a high-quality image (score 80+)"""
+        return (
+            self.primary_image_quality_score is not None
+            and self.primary_image_quality_score >= 80
+        )
+
+    @property
+    def has_good_image(self) -> bool:
+        """Check if scholarship has a good quality image (score 60+)"""
+        return (
+            self.primary_image_quality_score is not None
+            and self.primary_image_quality_score >= 60
+        )
+
+    def update_image_info(
+        self,
+        image_url: str,
+        quality_score: int,
+        logo_url: Optional[str] = None,
+        status: ImageExtractionStatus = ImageExtractionStatus.SUCCESS,
+    ):
+        """Update image information for the scholarship"""
+        self.primary_image_url = image_url
+        self.primary_image_quality_score = quality_score
+        if logo_url:
+            self.logo_image_url = logo_url
+        self.image_extraction_status = status
+        self.image_extraction_date = datetime.utcnow()
 
     # ===========================
     # MATCHING LOGIC METHODS

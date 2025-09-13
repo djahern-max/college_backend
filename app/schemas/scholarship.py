@@ -1,4 +1,4 @@
-# app/schemas/scholarship.py - SIMPLIFIED VERSION
+# app/schemas/scholarship.py
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List
 from datetime import datetime
@@ -134,6 +134,11 @@ class ScholarshipBase(BaseModel):
     military_affiliation_required: bool = False
     employer_affiliation: Optional[str] = None
 
+    # Image fields (for scholarship cards)
+    primary_image_url: Optional[str] = Field(None, max_length=500)
+    primary_image_quality_score: Optional[int] = Field(None, ge=0, le=100)
+    logo_image_url: Optional[str] = Field(None, max_length=500)
+
     @validator("amount_max")
     def validate_amount_range(cls, v, values):
         if (
@@ -155,7 +160,50 @@ class ScholarshipBase(BaseModel):
 class ScholarshipCreate(ScholarshipBase):
     """Schema for creating scholarships"""
 
-    pass
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "title": "National Merit Academic Excellence Scholarship",
+                "description": "This scholarship recognizes outstanding academic achievement and leadership potential among high school seniors pursuing STEM fields.",
+                "organization": "National Merit Foundation",
+                "website_url": "https://www.nationalmerit.org",
+                "application_url": "https://www.nationalmerit.org/apply",
+                "scholarship_type": "academic_merit",
+                "categories": ["STEM", "Leadership", "Academic Excellence"],
+                "difficulty_level": "hard",
+                "amount_min": 5000,
+                "amount_max": 10000,
+                "is_renewable": True,
+                "renewal_years": 4,
+                "number_of_awards": 50,
+                "min_gpa": 3.8,
+                "min_sat_score": 1450,
+                "min_act_score": 32,
+                "required_majors": ["Computer Science", "Engineering", "Mathematics"],
+                "academic_level": ["undergraduate"],
+                "eligible_states": ["California", "Texas", "Florida", "New York"],
+                "graduation_year_min": 2025,
+                "graduation_year_max": 2026,
+                "required_activities": ["Science Fair Participation", "Math Club"],
+                "volunteer_hours_min": 50,
+                "leadership_required": True,
+                "essay_required": True,
+                "essay_topics": [
+                    "How will your STEM education contribute to solving global challenges?"
+                ],
+                "essay_word_limit": 750,
+                "transcript_required": True,
+                "recommendation_letters_required": 3,
+                "interview_required": True,
+                "personal_statement_required": True,
+                "leadership_essay_required": True,
+                "deadline": "2025-03-15T23:59:59Z",
+                "is_rolling_deadline": False,
+                "primary_image_url": "https://magicscholar-images.nyc3.digitaloceanspaces.com/scholarships/national-merit.jpg",
+                "primary_image_quality_score": 95,
+                "logo_image_url": "https://magicscholar-images.nyc3.digitaloceanspaces.com/logos/national-merit-foundation.jpg",
+            }
+        }
 
 
 class ScholarshipResponse(ScholarshipBase):
@@ -175,21 +223,19 @@ class ScholarshipResponse(ScholarshipBase):
 
 
 # ===========================
-# SEARCH FILTERS (Simplified)
+# SEARCH FILTERS
 # ===========================
 
 
 class ScholarshipSearchFilter(BaseModel):
-    """Schema for scholarship search and filtering - simplified"""
+    """Schema for scholarship search and filtering"""
 
     # Pagination
     page: int = Field(1, ge=1)
     limit: int = Field(20, ge=1, le=100)
 
     # Basic filters
-    scholarship_type: Optional[str] = (
-        None  # Changed from ScholarshipType to str for simplicity
-    )
+    scholarship_type: Optional[str] = None
     active_only: bool = True
     verified_only: bool = False
 
@@ -211,7 +257,7 @@ class ScholarshipSearchFilter(BaseModel):
     requires_essay: Optional[bool] = None
 
     # Deadline filters
-    deadline_after: Optional[str] = None  # Simplified to string
+    deadline_after: Optional[str] = None
 
     # Sorting
     sort_by: str = Field("created_at", pattern="^(deadline|amount|created_at|title)$")
