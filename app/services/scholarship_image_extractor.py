@@ -138,75 +138,80 @@ class ScholarshipImageExtractor(MagicScholarImageExtractor):
         image_type: str,
         url: str,
         organization: str,
+        alt_text: str = "",  # NEW parameter
     ) -> int:
         """
-        Calculate quality score specifically for scholarship images
+        UPDATED: Calculate quality score with alt text analysis
         """
         score = 0
 
-        # Dimension scoring (25 points max)
+        # Dimension scoring (more lenient)
         if width > 0 and height > 0:
             ratio = width / height
-            if 1.0 <= ratio <= 3.0:  # Good for organization logos and banners
+            if 0.5 <= ratio <= 4.0:  # Much more lenient aspect ratio
                 score += 25
-            elif 0.5 <= ratio <= 4.0:  # Acceptable
-                score += 15
+            else:
+                score += 10  # Still give some points for any dimensions
 
-        # Size scoring (15 points max)
-        if size_bytes > 100000:  # 100KB+
+        # Size scoring (more lenient)
+        if size_bytes > 50000:  # 50KB+
             score += 15
-        elif size_bytes > 50000:  # 50KB+
-            score += 12
         elif size_bytes > 20000:  # 20KB+
-            score += 8
+            score += 12
         elif size_bytes > 10000:  # 10KB+
+            score += 8
+        elif size_bytes > 5000:  # 5KB+
             score += 4
 
-        # Image type scoring (40 points max)
+        # Image type scoring (more generous)
         type_scores = {
-            "og_image": 30,  # Usually best quality
-            "twitter_image": 25,  # Good quality
-            "org_logo": 35,  # Perfect for scholarships
-            "hero": 20,  # Good organizational imagery
-            "logo": 25,  # Organization branding
-            "favicon": 5,  # Too small usually
+            "og_image": 35,  # Increased
+            "twitter_image": 30,  # Increased
+            "scholarship_image": 40,  # NEW: Highest for scholarship-specific content
+            "program_image": 35,  # NEW: High for program imagery
+            "hero": 30,  # Increased
+            "org_logo": 25,
+            "cms_image": 25,  # NEW: CMS images
+            "large_image": 20,  # NEW: Any large image
+            "favicon": 5,
         }
-        score += type_scores.get(image_type, 10)
+        score += type_scores.get(image_type, 15)  # Higher default
 
-        # Content analysis (15 points max)
-        content_score = self._analyze_scholarship_content(url, image_type, organization)
+        # Enhanced content analysis with alt text
+        content_score = self._analyze_scholarship_content(
+            url, image_type, organization, alt_text
+        )
         score += content_score
 
-        # Quality penalties
+        # More lenient penalties
         penalties = [
-            (width < 200 or height < 150, -15),  # Too small
-            ("favicon" in url.lower(), -20),  # Likely favicon
-            (size_bytes > 10 * 1024 * 1024, -10),  # Too large (>10MB)
-            (ratio > 5.0 if width > 0 and height > 0 else False, -10),  # Too wide
+            (width < 150 or height < 100, -10),  # Less strict size penalty
+            ("favicon" in url.lower(), -15),  # Less harsh favicon penalty
+            (size_bytes > 10 * 1024 * 1024, -5),  # Less harsh large file penalty
         ]
 
         for condition, penalty in penalties:
             if condition:
                 score += penalty
 
-        return max(0, min(100, score))
+        return max(5, min(100, score))  # Minimum score of 5 instead of 0
 
     def extract_images_from_scholarship_website(
         self, url: str, organization: str
     ) -> Dict[str, Dict]:
         """
-        Extract images from scholarship organization website
+        FIXED: Extract images from scholarship organization website
+        Now properly finds images that exist on these sites
         """
         extracted_images = {}
 
         try:
-            # Use self.session instead of self.headers
             response = self.session.get(url, timeout=15)
             response.raise_for_status()
 
             soup = BeautifulSoup(response.content, "html.parser")
 
-            # 1. Extract Open Graph image (highest priority for orgs)
+            # 1. Extract Open Graph image (same as before, but lower threshold)
             og_image = soup.find("meta", property="og:image")
             if og_image and og_image.get("content"):
                 og_url = urljoin(url, og_image.get("content"))
@@ -214,11 +219,11 @@ class ScholarshipImageExtractor(MagicScholarImageExtractor):
                     og_url, organization, "og_image"
                 )
                 if (
-                    processed and processed["quality_score"] > 15
-                ):  # Lowered from 30 to 15
+                    processed and processed["quality_score"] > 10
+                ):  # Much lower threshold
                     extracted_images["og_image"] = processed
 
-            # 2. Extract Twitter image
+            # 2. Extract Twitter image (same as before, but lower threshold)
             twitter_image = soup.find("meta", attrs={"name": "twitter:image"})
             if twitter_image and twitter_image.get("content"):
                 twitter_url = urljoin(url, twitter_image.get("content"))
@@ -226,11 +231,86 @@ class ScholarshipImageExtractor(MagicScholarImageExtractor):
                     twitter_url, organization, "twitter_image"
                 )
                 if (
-                    processed and processed["quality_score"] > 12
-                ):  # Lowered from 25 to 12
+                    processed and processed["quality_score"] > 10
+                ):  # Much lower threshold
                     extracted_images["twitter_image"] = processed
 
-            # 3. Organization logo selectors
+            # 3. NEW: Extract large images (this was completely missing!)
+            all_images = soup.find_all("img")
+            large_images_found = 0
+
+            for img in all_images:
+                src = img.get("src")
+                if not src:
+                    continue
+
+                # Skip tiny/navigation images
+                skip_keywords = [
+                    "icon",
+                    "favicon",
+                    "nav",
+                    "menu",
+                    "arrow",
+                    "button",
+                    "social",
+                ]
+                if any(keyword in src.lower() for keyword in skip_keywords):
+                    continue
+
+                # Skip very small explicit dimensions
+                width = img.get("width")
+                height = img.get("height")
+                if width and height:
+                    try:
+                        w, h = int(width), int(height)
+                        if w < 200 or h < 150:  # Skip small images
+                            continue
+                    except:
+                        pass
+
+                # Get alt text for better categorization
+                alt_text = img.get("alt", "").lower()
+
+                # Determine image type based on content
+                image_type = "large_image"  # default
+                if any(
+                    keyword in src.lower() or keyword in alt_text
+                    for keyword in [
+                        "scholarship",
+                        "award",
+                        "scholar",
+                        "graduate",
+                        "student",
+                    ]
+                ):
+                    image_type = "scholarship_image"
+                elif any(
+                    keyword in src.lower() or keyword in alt_text
+                    for keyword in ["hero", "banner", "main"]
+                ):
+                    image_type = "hero"
+                elif any(
+                    keyword in src.lower() or keyword in alt_text
+                    for keyword in ["about", "program", "mission", "vision"]
+                ):
+                    image_type = "program_image"
+
+                img_url = urljoin(url, src)
+                processed = self.download_and_process_scholarship_image(
+                    img_url, organization, image_type, alt_text
+                )
+
+                if processed and processed["quality_score"] > 15:  # Very low threshold
+                    # Keep the best image of each type
+                    key = f"{image_type}_{large_images_found}"
+                    extracted_images[key] = processed
+                    large_images_found += 1
+
+                    # Limit to prevent too many requests
+                    if large_images_found >= 10:
+                        break
+
+            # 4. Enhanced organization logo selectors (keep existing logic)
             org_logo_selectors = [
                 'img[alt*="logo" i]',
                 'img[src*="logo" i]',
@@ -246,20 +326,17 @@ class ScholarshipImageExtractor(MagicScholarImageExtractor):
 
             for selector in org_logo_selectors:
                 logo_imgs = soup.select(selector)
-                for logo_img in logo_imgs[:3]:
+                for logo_img in logo_imgs[:2]:
                     if logo_img.get("src"):
                         logo_url = urljoin(url, logo_img.get("src"))
-                        alt_text = logo_img.get("alt", "")  # Add this line
+                        alt_text = logo_img.get("alt", "")
                         processed = self.download_and_process_scholarship_image(
-                            logo_url,
-                            organization,
-                            "org_logo",
-                            alt_text,  # Pass alt text
+                            logo_url, organization, "org_logo", alt_text
                         )
 
                         if (
-                            processed and processed["quality_score"] > 15
-                        ):  # Lowered from 25 to 15
+                            processed and processed["quality_score"] > 10
+                        ):  # Lower threshold
                             if (
                                 "org_logo" not in extracted_images
                                 or processed["quality_score"]
@@ -267,57 +344,94 @@ class ScholarshipImageExtractor(MagicScholarImageExtractor):
                             ):
                                 extracted_images["org_logo"] = processed
 
-            # 4. Hero/banner images (scholarship program imagery)
-            hero_selectors = [
-                ".hero img",
-                ".banner img",
-                ".main-banner img",
-                'img[src*="hero" i]',
-                'img[src*="banner" i]',
-                'img[alt*="scholarship" i]',
-                'img[alt*="program" i]',
-                'img[alt*="award" i]',
-                'img[class*="hero" i]',
-                'img[class*="banner" i]',
-                'img[class*="scholarship" i]',
-                'img[class*="program" i]',
+            # 5. NEW: Look for WordPress uploads and common CMS patterns
+            # Many scholarship sites use WordPress/CMS with predictable image patterns
+            wp_selectors = [
+                'img[src*="wp-content" i]',
+                'img[src*="uploads" i]',
+                'img[src*="media" i]',
+                'img[src*="assets" i]',
+                'img[src*="images" i]',
             ]
 
-            for selector in hero_selectors:
-                hero_imgs = soup.select(selector)
-                for hero_img in hero_imgs[:2]:
-                    if hero_img.get("src"):
-                        hero_url = urljoin(url, hero_img.get("src"))
+            wp_images_found = 0
+            for selector in wp_selectors:
+                wp_imgs = soup.select(selector)
+                for wp_img in wp_imgs[:5]:  # Limit per selector
+                    src = wp_img.get("src")
+                    if src and wp_images_found < 5:  # Overall limit
+                        # Skip tiny images
+                        if any(
+                            skip in src.lower() for skip in ["thumb", "icon", "small"]
+                        ):
+                            continue
+
+                        img_url = urljoin(url, src)
+                        alt_text = wp_img.get("alt", "")
                         processed = self.download_and_process_scholarship_image(
-                            hero_url, organization, "hero"
+                            img_url, organization, "cms_image", alt_text
                         )
-                        if (
-                            processed and processed["quality_score"] > 10
-                        ):  # Lowered from 20 to 10
-                            if (
-                                "hero" not in extracted_images
-                                or processed["quality_score"]
-                                > extracted_images["hero"]["quality_score"]
-                            ):
-                                extracted_images["hero"] = processed
+
+                        if processed and processed["quality_score"] > 15:
+                            key = f"cms_image_{wp_images_found}"
+                            extracted_images[key] = processed
+                            wp_images_found += 1
+
+            return extracted_images
 
         except Exception as e:
             logger.error(f"Error extracting images from {url}: {e}")
-
-        return extracted_images
+            return {}
 
     def download_and_process_scholarship_image(
         self, image_url: str, organization: str, image_type: str, alt_text: str = ""
     ) -> Optional[Dict]:
         """
-        Download and process a scholarship image with organization-specific scoring
+        UPDATED: Download and process a scholarship image with alt text analysis
         """
         try:
-            # Use the inherited method from base class with organization as school_name
-            return self.download_and_process_image(image_url, organization, image_type)
+            response = self.session.get(image_url, timeout=10)
+            response.raise_for_status()
+
+            # Get image info
+            image_info = self.get_image_info(response.content)
+            if not image_info:
+                return None
+
+            # Calculate quality score using scholarship-specific logic WITH alt text
+            quality_score = self._calculate_scholarship_quality_score(
+                image_info["width"],
+                image_info["height"],
+                image_info["size_bytes"],
+                image_type,
+                image_url,
+                organization,
+                alt_text,  # Pass alt text for better scoring
+            )
+
+            # MUCH MORE LENIENT: Skip only very low quality images
+            if quality_score < 5:  # Was 15, now 5
+                return None
+
+            # Process image (resize, optimize)
+            processed_image = self.process_image(response.content)
+            if not processed_image:
+                return None
+
+            return {
+                "image_data": processed_image,
+                "original_url": image_url,
+                "image_type": image_type,
+                "quality_score": quality_score,
+                "width": image_info["width"],
+                "height": image_info["height"],
+                "size_bytes": len(processed_image),
+                "organization": organization,
+                "processed_bytes": processed_image,  # Add this for consistency
+            }
 
         except Exception as e:
-            logger.error(f"Failed to download scholarship image {image_url}: {e}")
+            logger.error(f"Error processing scholarship image {image_url}: {e}")
             return None
 
     def process_scholarship(self, scholarship: Scholarship) -> Dict[str, Any]:
