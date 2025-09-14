@@ -38,7 +38,7 @@ def list_all_scholarships():
 def upload_image_to_scholarship(
     scholarship_id: int, image_filename: str, quality_score: int = 95
 ):
-    """Upload an image to a specific scholarship by ID with better fitting"""
+    """Upload an image to a specific scholarship - keep original aspect ratio"""
     engine = create_engine(str(settings.DATABASE_URL))
     SessionLocal = sessionmaker(bind=engine)
     db = SessionLocal()
@@ -53,52 +53,61 @@ def upload_image_to_scholarship(
             print(f"Scholarship with ID {scholarship_id} not found")
             return False
 
-        image_path = f"manual_images/{image_filename}"
-
+        # Look for image in current directory first, then manual_images
+        image_path = image_filename
         if not os.path.exists(image_path):
-            print(f"Image not found at {image_path}")
-            return False
+            image_path = f"manual_images/{image_filename}"
+            if not os.path.exists(image_path):
+                image_path = f"../manual_images/{image_filename}"
+                if not os.path.exists(image_path):
+                    print(f"Image not found at any expected location")
+                    print(
+                        f"Tried: {image_filename}, manual_images/{image_filename}, ../manual_images/{image_filename}"
+                    )
+                    return False
 
-        print(f"Uploading {image_filename} to scholarship: {scholarship.title}")
+        print(f"Found image at: {image_path}")
+        print(f"Uploading to scholarship: {scholarship.title}")
 
         with Image.open(image_path) as img:
             # Convert to RGB if necessary
             if img.mode != "RGB":
                 img = img.convert("RGB")
 
-            # Target size
-            target_width, target_height = 400, 300
+            # For scholarship graphics, maintain original proportions but standardize size
+            # Target maximum dimensions while keeping aspect ratio
+            max_width, max_height = 400, 300
 
-            # Calculate scaling to fit within target while maintaining aspect ratio
-            img_width, img_height = img.size
-            scale = min(target_width / img_width, target_height / img_height)
+            # Get original dimensions
+            original_width, original_height = img.size
+            print(f"Original size: {original_width}x{original_height}")
+
+            # Calculate scaling to fit within max dimensions
+            scale_w = max_width / original_width
+            scale_h = max_height / original_height
+            scale = min(scale_w, scale_h)
+
+            # New dimensions maintaining aspect ratio
+            new_width = int(original_width * scale)
+            new_height = int(original_height * scale)
+
+            print(f"Scaled size: {new_width}x{new_height}")
 
             # Resize maintaining aspect ratio
-            new_width = int(img_width * scale)
-            new_height = int(img_height * scale)
-            img_resized = img.resize((new_width, new_height), Image.LANCZOS)
-
-            # Create new image with target dimensions and dark background
-            final_img = Image.new(
-                "RGB", (target_width, target_height), (40, 40, 40)
-            )  # Dark gray background
-
-            # Center the resized image
-            x_offset = (target_width - new_width) // 2
-            y_offset = (target_height - new_height) // 2
-            final_img.paste(img_resized, (x_offset, y_offset))
+            img = img.resize((new_width, new_height), Image.LANCZOS)
 
             # Save to bytes
             img_bytes = BytesIO()
-            final_img.save(img_bytes, format="JPEG", quality=90)
+            img.save(img_bytes, format="JPEG", quality=95, optimize=True)
             img_bytes.seek(0)
 
             # Create unique filename for CDN
-            cdn_filename = f"scholarship_{scholarship_id}_{image_filename}"
+            base_name = image_filename.split(".")[0]
+            cdn_filename = f"scholarship_{scholarship_id}_{base_name}_optimized.jpg"
 
             cdn_url = uploader.upload_image(
                 image_bytes=img_bytes.getvalue(),
-                file_path=f"scholarships/manual/{cdn_filename}",
+                file_path=f"scholarships/optimized/{cdn_filename}",
                 content_type="image/jpeg",
             )
 
@@ -110,7 +119,7 @@ def upload_image_to_scholarship(
 
                 print(f"SUCCESS! Updated {scholarship.title}")
                 print(f"CDN URL: {cdn_url}")
-                print(f"Image fitted with proper aspect ratio and centered")
+                print(f"Image optimized: {new_width}x{new_height}px")
                 return True
             else:
                 print("Failed to upload to CDN")
@@ -142,9 +151,7 @@ def main():
         elif choice == "2":
             try:
                 scholarship_id = int(input("Enter scholarship ID: ").strip())
-                image_filename = input(
-                    "Enter image filename (in manual_images/ folder): "
-                ).strip()
+                image_filename = input("Enter image filename: ").strip()
 
                 if upload_image_to_scholarship(scholarship_id, image_filename):
                     print("\nImage uploaded successfully!")
