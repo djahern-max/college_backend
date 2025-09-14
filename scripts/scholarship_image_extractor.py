@@ -176,27 +176,41 @@ def run_scholarship_image_extraction(
         logger.info("=" * 60)
         logger.info("EXTRACTION RESULTS")
         logger.info("=" * 60)
-        logger.info(f"📊 Total Processed: {result['total_processed']}")
-        logger.info(f"✅ Successful: {result['successful']}")
-        logger.info(f"❌ Failed: {result['failed']}")
-        logger.info(f"🌐 No Website: {result['no_website']}")
-        logger.info(f"🏢 Org Logos Found: {result['org_logos_found']}")
+        logger.info(f"📊 Total Processed: {result.get('total_processed', 0)}")
+        logger.info(f"✅ Successful: {result.get('successful', 0)}")
+        logger.info(f"❌ Failed: {result.get('failed', 0)}")
+        logger.info(f"🌐 No Website: {result.get('no_website', 0)}")
+        logger.info(f"🏢 Org Logos Found: {result.get('org_logos_found', 0)}")
 
-        # Show some sample results
-        if result["results"]:
+        # Show some sample results - with better error handling
+        results_list = result.get("results", []) if result else []
+        if results_list:
             logger.info(f"\n📋 Sample Results:")
             logger.info("-" * 80)
-            for i, res in enumerate(result["results"][:5]):
-                status_emoji = "✅" if res["status"] == "success" else "❌"
-                quality = res.get("best_image", {}).get("quality_score", "N/A")
-                logger.info(
-                    f"{status_emoji} {res['title'][:40]:40} | Quality: {quality} | Status: {res['status']}"
-                )
+            for i, res in enumerate(results_list[:5]):
+                if res:  # Check if res is not None
+                    status_emoji = "✅" if res.get("status") == "success" else "❌"
+                    best_image = res.get("best_image")
+                    quality = (
+                        best_image.get("quality_score", "N/A") if best_image else "N/A"
+                    )
+                    title = res.get("title", "Unknown")[:40]
+                    status = res.get("status", "unknown")
+                    logger.info(
+                        f"{status_emoji} {title:40} | Quality: {quality} | Status: {status}"
+                    )
+                else:
+                    logger.info(f"❌ Result {i+1}: No data returned")
+        else:
+            logger.info("No results to display")
 
         return result
 
     except Exception as e:
         logger.error(f"Error in scholarship image extraction: {e}")
+        import traceback
+
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise
 
 

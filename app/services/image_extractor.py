@@ -535,42 +535,37 @@ class MagicScholarImageExtractor:
             return {}
 
     def select_best_image(
-        self, school_images: Dict[str, Any]
+        self, scholarship_images: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
-        """Select the single best image with improved campus-focused logic"""
-        if not school_images:
+        """Select the best image with more relaxed quality requirements"""
+        if not scholarship_images:
             return None
 
-        # Sort by quality score
         sorted_images = sorted(
-            school_images.values(), key=lambda x: x["quality_score"], reverse=True
+            scholarship_images.values(), key=lambda x: x["quality_score"], reverse=True
         )
 
-        # First, look for high-quality campus imagery (prioritize og_image and hero with high scores)
+        # RELAXED THRESHOLDS - More forgiving for scholarship images
+        priorities = [
+            ("og_image", 30),  # Lowered from 65 to 30
+            ("twitter_image", 25),  # Lowered from 60 to 25
+            ("hero", 25),  # Lowered from 35 to 25
+            ("logo", 40),  # Lowered from 70 to 40
+            ("favicon", 20),  # Lowered from 50 to 20
+        ]
+
+        # Try each priority tier
+        for img_type, min_score in priorities:
+            for img in sorted_images:
+                if img["image_type"] == img_type and img["quality_score"] >= min_score:
+                    return img
+
+        # Ultimate fallback - accept ANY image with score > 15
         for img in sorted_images:
-            if (
-                img["image_type"] in ["og_image", "hero"] and img["quality_score"] >= 65
-            ):  # Raised threshold from 60
+            if img["quality_score"] >= 15:
                 return img
 
-        # Next, accept good twitter images if they score well
-        for img in sorted_images:
-            if img["image_type"] == "twitter_image" and img["quality_score"] >= 60:
-                return img
-
-        # Only accept logos if they score very well (indicating campus elements)
-        for img in sorted_images:
-            if (
-                img["image_type"] == "logo" and img["quality_score"] >= 70
-            ):  # High threshold for logos
-                return img
-
-        # Last resort - any non-favicon image with decent score
-        for img in sorted_images:
-            if img["image_type"] != "favicon" and img["quality_score"] >= 40:
-                return img
-
-        # Absolute last resort - best available image
+        # Last resort - return best available regardless of score
         return sorted_images[0] if sorted_images else None
 
     def upload_image_to_spaces(

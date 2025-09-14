@@ -38,97 +38,97 @@ class ScholarshipImageExtractor(MagicScholarImageExtractor):
             }
         )
 
+    def select_best_image(
+        self, scholarship_images: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Select the best image with more relaxed quality requirements for scholarships
+        """
+        if not scholarship_images:
+            return None
+
+        sorted_images = sorted(
+            scholarship_images.values(), key=lambda x: x["quality_score"], reverse=True
+        )
+
+        # RELAXED THRESHOLDS - More forgiving for scholarship images
+        priorities = [
+            ("org_logo", 25),  # Organization logos are great for scholarships
+            ("og_image", 20),  # Lowered from 30 to 20
+            ("twitter_image", 18),  # Lowered from 25 to 18
+            ("hero", 15),  # Lowered from much higher to 15
+            ("logo", 25),  # Organization branding
+            ("favicon", 10),  # Very low but still possible
+        ]
+
+        # Try each priority tier
+        for img_type, min_score in priorities:
+            for img in sorted_images:
+                if img["image_type"] == img_type and img["quality_score"] >= min_score:
+                    return img
+
+        # Ultimate fallback - accept ANY image with score > 5
+        for img in sorted_images:
+            if img["quality_score"] >= 5:
+                return img
+
+        # Last resort - return best available regardless of score
+        return sorted_images[0] if sorted_images else None
+
     def _analyze_scholarship_content(
-        self, url: str, image_type: str, organization: str
+        self, url: str, image_type: str, organization: str, alt_text: str = ""
     ) -> int:
         """
-        Analyze image URL and type for scholarship/organization appropriateness
+        Enhanced content analysis that heavily penalizes generic imagery
         """
         content_score = 0
         url_lower = url.lower()
         org_lower = organization.lower()
+        alt_lower = alt_text.lower()
 
-        # Positive indicators for organization/scholarship imagery (+5 to +15 points)
-        org_keywords = [
-            "logo",
-            "brand",
-            "foundation",
-            "scholarship",
-            "award",
-            "program",
-            "organization",
-            "institution",
-            "fund",
-            "grant",
-            "education",
-            "academic",
-            "merit",
-            "achievement",
-            "excellence",
-            "leadership",
+        # HEAVY penalties for generic/inappropriate imagery (-20 to -30 points)
+        generic_penalties = [
+            (["headshot", "portrait", "professional", "business", "exec"], -25),
+            (["stock", "shutterstock", "getty", "istock"], -30),
+            (["meeting", "conference", "office", "desk"], -20),
+            (["person", "people", "man", "woman", "ceo", "director"], -15),
+            (["generic", "placeholder", "default", "temp"], -25),
+            (["staff", "employee", "team", "board"], -20),
         ]
 
-        for keyword in org_keywords:
-            if keyword in url_lower:
-                content_score += 8
-                break  # Don't double-count
+        for keywords, penalty in generic_penalties:
+            if any(
+                keyword in url_lower or keyword in alt_lower for keyword in keywords
+            ):
+                content_score += penalty
+                break  # Don't stack penalties
 
-        # Check if organization name appears in URL (+10 points)
+        # Strong bonuses for scholarship-relevant imagery (+10 to +25 points)
+        scholarship_bonuses = [
+            (["scholarship", "award", "grant", "fellowship"], +25),
+            (["graduate", "graduation", "ceremony", "diploma"], +20),
+            (["student", "students", "scholar", "scholars"], +18),
+            (["winner", "recipient", "awardee", "honoree"], +20),
+            (["logo", "seal", "emblem", "badge"], +15),
+            (["program", "foundation", "fund", "education"], +12),
+            (["academic", "achievement", "excellence", "merit"], +15),
+        ]
+
+        for keywords, bonus in scholarship_bonuses:
+            if any(
+                keyword in url_lower or keyword in alt_lower for keyword in keywords
+            ):
+                content_score += bonus
+                break
+
+        # Organization name matching (+15 points)
         org_words = [word for word in org_lower.split() if len(word) > 3]
         for word in org_words:
-            if word in url_lower:
-                content_score += 10
+            if word in url_lower or word in alt_lower:
+                content_score += 15
                 break
 
-        # Positive indicators for educational/award imagery (+3 to +8 points)
-        educational_keywords = [
-            "student",
-            "graduation",
-            "graduate",
-            "college",
-            "university",
-            "degree",
-            "diploma",
-            "ceremony",
-            "academic",
-            "learning",
-            "scholar",
-            "fellows",
-            "winner",
-            "recipient",
-        ]
-
-        for keyword in educational_keywords:
-            if keyword in url_lower:
-                content_score += 5
-                break
-
-        # Negative indicators for inappropriate content (-5 to -20 points)
-        negative_keywords = [
-            "staff",
-            "employee",
-            "board",
-            "directors",
-            "meeting",
-            "office",
-            "construction",
-            "building",
-            "facility",
-            "news",
-            "event",
-            "conference",
-            "generic",
-            "stock",
-            "placeholder",
-            "temp",
-        ]
-
-        for keyword in negative_keywords:
-            if keyword in url_lower:
-                content_score -= 8
-                break
-
-        return max(-15, min(15, content_score))
+        return max(-30, min(25, content_score))
 
     def _calculate_scholarship_quality_score(
         self,
@@ -200,7 +200,8 @@ class ScholarshipImageExtractor(MagicScholarImageExtractor):
         extracted_images = {}
 
         try:
-            response = requests.get(url, headers=self.headers, timeout=15)
+            # Use self.session instead of self.headers
+            response = self.session.get(url, timeout=15)
             response.raise_for_status()
 
             soup = BeautifulSoup(response.content, "html.parser")
@@ -212,7 +213,9 @@ class ScholarshipImageExtractor(MagicScholarImageExtractor):
                 processed = self.download_and_process_scholarship_image(
                     og_url, organization, "og_image"
                 )
-                if processed and processed["quality_score"] > 30:
+                if (
+                    processed and processed["quality_score"] > 15
+                ):  # Lowered from 30 to 15
                     extracted_images["og_image"] = processed
 
             # 2. Extract Twitter image
@@ -222,7 +225,9 @@ class ScholarshipImageExtractor(MagicScholarImageExtractor):
                 processed = self.download_and_process_scholarship_image(
                     twitter_url, organization, "twitter_image"
                 )
-                if processed and processed["quality_score"] > 25:
+                if (
+                    processed and processed["quality_score"] > 12
+                ):  # Lowered from 25 to 12
                     extracted_images["twitter_image"] = processed
 
             # 3. Organization logo selectors
@@ -241,13 +246,20 @@ class ScholarshipImageExtractor(MagicScholarImageExtractor):
 
             for selector in org_logo_selectors:
                 logo_imgs = soup.select(selector)
-                for logo_img in logo_imgs[:3]:  # Check first 3 matches
+                for logo_img in logo_imgs[:3]:
                     if logo_img.get("src"):
                         logo_url = urljoin(url, logo_img.get("src"))
+                        alt_text = logo_img.get("alt", "")  # Add this line
                         processed = self.download_and_process_scholarship_image(
-                            logo_url, organization, "org_logo"
+                            logo_url,
+                            organization,
+                            "org_logo",
+                            alt_text,  # Pass alt text
                         )
-                        if processed and processed["quality_score"] > 25:
+
+                        if (
+                            processed and processed["quality_score"] > 15
+                        ):  # Lowered from 25 to 15
                             if (
                                 "org_logo" not in extracted_images
                                 or processed["quality_score"]
@@ -279,7 +291,9 @@ class ScholarshipImageExtractor(MagicScholarImageExtractor):
                         processed = self.download_and_process_scholarship_image(
                             hero_url, organization, "hero"
                         )
-                        if processed and processed["quality_score"] > 20:
+                        if (
+                            processed and processed["quality_score"] > 10
+                        ):  # Lowered from 20 to 10
                             if (
                                 "hero" not in extracted_images
                                 or processed["quality_score"]
@@ -293,53 +307,17 @@ class ScholarshipImageExtractor(MagicScholarImageExtractor):
         return extracted_images
 
     def download_and_process_scholarship_image(
-        self, image_url: str, organization: str, image_type: str
+        self, image_url: str, organization: str, image_type: str, alt_text: str = ""
     ) -> Optional[Dict]:
         """
         Download and process a scholarship image with organization-specific scoring
         """
         try:
-            # Download image
-            response = requests.get(image_url, headers=self.headers, timeout=10)
-            response.raise_for_status()
-
-            # Get image info
-            image_info = self.get_image_info(response.content)
-            if not image_info:
-                return None
-
-            # Calculate quality score using scholarship-specific logic
-            quality_score = self._calculate_scholarship_quality_score(
-                image_info["width"],
-                image_info["height"],
-                image_info["size_bytes"],
-                image_type,
-                image_url,
-                organization,
-            )
-
-            # Skip very low quality images
-            if quality_score < 15:
-                return None
-
-            # Process image (resize, optimize)
-            processed_image = self.process_image(response.content)
-            if not processed_image:
-                return None
-
-            return {
-                "image_data": processed_image,
-                "original_url": image_url,
-                "image_type": image_type,
-                "quality_score": quality_score,
-                "width": image_info["width"],
-                "height": image_info["height"],
-                "size_bytes": len(processed_image),
-                "organization": organization,
-            }
+            # Use the inherited method from base class with organization as school_name
+            return self.download_and_process_image(image_url, organization, image_type)
 
         except Exception as e:
-            logger.error(f"Error processing scholarship image {image_url}: {e}")
+            logger.error(f"Failed to download scholarship image {image_url}: {e}")
             return None
 
     def process_scholarship(self, scholarship: Scholarship) -> Dict[str, Any]:
@@ -377,46 +355,57 @@ class ScholarshipImageExtractor(MagicScholarImageExtractor):
                 scholarship.image_extraction_status = ImageExtractionStatus.FAILED
                 self.stats["failed_scholarships"] += 1
             else:
-                # Find the best image
-                best_image = max(
-                    extracted_images.values(), key=lambda x: x["quality_score"]
-                )
+                # UPDATED: Use the new select_best_image method instead of max()
+                best_image = self.select_best_image(extracted_images)
 
-                result["best_image"] = best_image
-
-                # Upload to CDN
-                primary_url = self.upload_image_to_spaces(
-                    best_image["image_data"],
-                    f"scholarship-images/primary/{scholarship.id}",
-                )
-
-                if primary_url:
-                    result["cdn_urls"]["primary"] = primary_url
-                    scholarship.primary_image_url = primary_url
-                    scholarship.primary_image_quality_score = best_image[
-                        "quality_score"
-                    ]
-                    scholarship.image_extraction_status = ImageExtractionStatus.SUCCESS
-
-                    # Upload logo separately if we found one
-                    if (
-                        "org_logo" in extracted_images
-                        and extracted_images["org_logo"] != best_image
-                    ):
-                        logo_url = self.upload_image_to_spaces(
-                            extracted_images["org_logo"]["image_data"],
-                            f"scholarship-images/logos/{scholarship.id}",
-                        )
-                        if logo_url:
-                            result["cdn_urls"]["logo"] = logo_url
-                            scholarship.logo_image_url = logo_url
-                            self.stats["org_logos_found"] += 1
-
-                    self.stats["successful_scholarships"] += 1
-                else:
-                    result["status"] = "upload_failed"
+                if not best_image:
+                    result["status"] = "no_suitable_images"
                     scholarship.image_extraction_status = ImageExtractionStatus.FAILED
                     self.stats["failed_scholarships"] += 1
+                else:
+                    result["best_image"] = best_image
+
+                    # Upload to CDN
+                    primary_url = self.uploader.upload_image(
+                        best_image[
+                            "processed_bytes"
+                        ],  # Note: processed_bytes, not image_data
+                        f"scholarship-images/primary/{scholarship.id}.jpg",
+                        "image/jpeg",
+                    )
+
+                    if primary_url:
+                        result["cdn_urls"]["primary"] = primary_url
+                        scholarship.primary_image_url = primary_url
+                        scholarship.primary_image_quality_score = best_image[
+                            "quality_score"
+                        ]
+                        scholarship.image_extraction_status = (
+                            ImageExtractionStatus.SUCCESS
+                        )
+
+                        # Upload logo separately if we found one
+                        if (
+                            "org_logo" in extracted_images
+                            and extracted_images["org_logo"] != best_image
+                        ):
+                            logo_url = self.uploader.upload_image(
+                                extracted_images["org_logo"]["processed_bytes"],
+                                f"scholarship-images/logos/{scholarship.id}.jpg",
+                                "image/jpeg",
+                            )
+                            if logo_url:
+                                result["cdn_urls"]["logo"] = logo_url
+                                scholarship.logo_image_url = logo_url
+                                self.stats["org_logos_found"] += 1
+
+                        self.stats["successful_scholarships"] += 1
+                    else:
+                        result["status"] = "upload_failed"
+                        scholarship.image_extraction_status = (
+                            ImageExtractionStatus.FAILED
+                        )
+                        self.stats["failed_scholarships"] += 1
 
             self.stats["processed_scholarships"] += 1
 
