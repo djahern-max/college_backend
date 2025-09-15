@@ -56,6 +56,65 @@ class InstitutionService:
             )
             raise Exception(f"Database error: {str(e)}")
 
+    def get_institutions_with_financial_data(
+        self, limit: int = 50, offset: int = 0
+    ) -> List[dict]:
+        """Get institutions ordered by customer_rank first, then financial data richness"""
+        try:
+            from app.models.step2_ic2023_ay import Step2_IC2023_AY
+
+            # Query with JOIN to get financial data
+            results = (
+                self.db.query(
+                    Institution,
+                    Step2_IC2023_AY.tuition_in_state,
+                    Step2_IC2023_AY.tuition_out_state,
+                    Step2_IC2023_AY.tuition_fees_in_state,
+                    Step2_IC2023_AY.room_board_on_campus,
+                    Step2_IC2023_AY.data_completeness_score,
+                    # Calculate data richness score
+                    func.coalesce(Step2_IC2023_AY.data_completeness_score, 0).label(
+                        "base_score"
+                    ),
+                )
+                .outerjoin(
+                    Step2_IC2023_AY, Institution.ipeds_id == Step2_IC2023_AY.ipeds_id
+                )
+                .order_by(
+                    desc(Institution.customer_rank).nulls_last(),
+                    desc(Step2_IC2023_AY.data_completeness_score).nulls_last(),
+                    desc(Institution.primary_image_quality_score).nulls_last(),
+                    Institution.name,
+                )
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+
+            # Format results
+            institutions_with_data = []
+            for result in results:
+                institution = result[0]  # Institution object
+                inst_dict = {
+                    "institution": institution,
+                    "tuition_in_state": result[1],
+                    "tuition_out_state": result[2],
+                    "tuition_fees_in_state": result[3],
+                    "room_board_on_campus": result[4],
+                    "data_completeness_score": result[5] or 0,
+                    "has_rich_financial_data": result[5] is not None
+                    and result[5] >= 80,
+                }
+                institutions_with_data.append(inst_dict)
+
+            return institutions_with_data
+
+        except SQLAlchemyError as e:
+            logger.error(
+                f"Database error getting institutions with financial data: {str(e)}"
+            )
+            raise Exception(f"Database error: {str(e)}")
+
     def create_institution(self, institution_data: InstitutionCreate) -> Institution:
         """Create a new institution"""
         try:
