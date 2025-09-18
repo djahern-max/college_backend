@@ -1,6 +1,6 @@
 # app/services/__init__.py
 """
-Service layer for CampusConnect application.
+Service layer for MagicScholar application.
 
 Services contain business logic and handle database operations.
 They act as an abstraction layer between API endpoints and database models.
@@ -9,6 +9,6 @@ They act as an abstraction layer between API endpoints and database models.
 from .user import UserService
 from .profile import ProfileService
 from .oauth import OAuthService
+from .tuition import TuitionService
 
-
-__all__ = ["UserService", "ProfileService", "OAuthService"]
+__all__ = ["UserService", "ProfileService", "OAuthService", "TuitionService"]

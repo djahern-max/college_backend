@@ -1,0 +1,17 @@
+{
+  "dataset_info": {
+    "total_institutions": 3419,
+    "institutions_with_tuition_data": 3409,
+    "data_completeness_rate": 99.7,
+    "academic_year": "2023-24"
+  },
+  "tuition_statistics": {
+    "in_state_tuition": {
+      "count": 3409,
+      "mean": 16811,
+      "median": 10723,
+      "min": 434,
+      "max": 69030
+    }
+  }
+}

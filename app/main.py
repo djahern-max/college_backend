@@ -8,8 +8,6 @@ from app.api.v1 import (
     profiles,
     scholarships,
     institution,
-    s2023_is,
-    step2_ic2023_ay,
 )
 from fastapi.routing import APIRoute
 from fastapi.responses import PlainTextResponse
@@ -43,8 +41,6 @@ app.include_router(
 app.include_router(
     admin_images.router, prefix="/api/v1/admin/images", tags=["admin-images"]
 )
-app.include_router(s2023_is.router, prefix="/api/v1", tags=["s2023-is"])
-app.include_router(step2_ic2023_ay.router, prefix="/api/v1", tags=["step2-ic2023-ay"])
 
 
 @app.get("/")
