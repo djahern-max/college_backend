@@ -1,10 +1,11 @@
 # app/services/tuition.py
 """
-Tuition Service - Business logic for tuition projections and analysis
+Complete Tuition Service - Business logic for tuition projections and analysis
 Integrates with your existing MagicScholar service architecture
 """
 
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import and_, or_, func, desc, asc
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
 import logging
@@ -18,6 +19,8 @@ from app.schemas.tuition import (
     TuitionSearchFilters,
     AffordabilityRequest,
     ProjectionRequest,
+    AffordabilityCategory,
+    ValidationStatus,
 )
 
 logger = logging.getLogger(__name__)
@@ -84,416 +87,408 @@ class TuitionService:
 
         self.db.delete(db_tuition)
         self.db.commit()
-
         logger.info(f"Deleted tuition data for IPEDS {ipeds_id}")
         return True
 
-    # Business Logic Methods
-    def get_with_institution_data(
-        self, ipeds_id: int
-    ) -> Optional[Tuple[TuitionData, Institution]]:
-        """Get tuition data with associated institution information"""
-        result = (
-            self.db.query(TuitionData, Institution)
-            .join(Institution, TuitionData.ipeds_id == Institution.ipeds_id)
-            .filter(TuitionData.ipeds_id == ipeds_id)
-            .first()
-        )
-        return result
+    def bulk_create(self, tuition_records: List[TuitionDataCreate]) -> int:
+        """Bulk create tuition data records"""
+        db_tuitions = []
+        for record in tuition_records:
+            db_tuition = TuitionData(**record.model_dump())
+            self._update_data_quality_indicators(db_tuition)
+            db_tuitions.append(db_tuition)
 
+        self.db.add_all(db_tuitions)
+        self.db.commit()
+
+        logger.info(f"Bulk created {len(db_tuitions)} tuition records")
+        return len(db_tuitions)
+
+    # Search and Filter Operations
     def search_institutions(
-        self, filters: TuitionSearchFilters, page: int = 1, per_page: int = 50
-    ) -> Tuple[List[Tuple[TuitionData, Institution]], int]:
-        """Search institutions with tuition filters"""
-
-        # Base query with institution join
-        query = (
-            self.db.query(TuitionData, Institution)
-            .join(Institution, TuitionData.ipeds_id == Institution.ipeds_id)
-            .filter(TuitionData.has_tuition_data == True)
+        self, filters: TuitionSearchFilters, limit: int = 50, offset: int = 0
+    ) -> Tuple[List[TuitionData], int]:
+        """Search institutions with tuition data"""
+        query = self.db.query(TuitionData).join(
+            Institution, TuitionData.ipeds_id == Institution.ipeds_id
         )
 
         # Apply filters
+        conditions = []
+
         if filters.min_tuition_in_state is not None:
-            query = query.filter(
+            conditions.append(
                 TuitionData.tuition_in_state >= filters.min_tuition_in_state
             )
-
         if filters.max_tuition_in_state is not None:
-            query = query.filter(
+            conditions.append(
                 TuitionData.tuition_in_state <= filters.max_tuition_in_state
             )
-
         if filters.min_tuition_out_state is not None:
-            query = query.filter(
+            conditions.append(
                 TuitionData.tuition_out_state >= filters.min_tuition_out_state
             )
-
         if filters.max_tuition_out_state is not None:
-            query = query.filter(
+            conditions.append(
                 TuitionData.tuition_out_state <= filters.max_tuition_out_state
             )
 
-        if filters.affordability_category:
-            # This is a calculated field, so we need to filter in memory or use a subquery
-            # For now, we'll apply this filter after the query
-            pass
+        if filters.min_total_cost is not None:
+            conditions.append(
+                TuitionData.tuition_fees_in_state >= filters.min_total_cost
+            )
+        if filters.max_total_cost is not None:
+            conditions.append(
+                TuitionData.tuition_fees_in_state <= filters.max_total_cost
+            )
 
-        if filters.state:
-            query = query.filter(Institution.state == filters.state.upper())
+        if filters.affordability_category is not None:
+            # Calculate affordability based on tuition ranges
+            if filters.affordability_category == AffordabilityCategory.VERY_AFFORDABLE:
+                conditions.append(TuitionData.tuition_in_state < 10000)
+            elif filters.affordability_category == AffordabilityCategory.AFFORDABLE:
+                conditions.append(
+                    and_(
+                        TuitionData.tuition_in_state >= 10000,
+                        TuitionData.tuition_in_state < 25000,
+                    )
+                )
+            elif filters.affordability_category == AffordabilityCategory.MODERATE:
+                conditions.append(
+                    and_(
+                        TuitionData.tuition_in_state >= 25000,
+                        TuitionData.tuition_in_state < 40000,
+                    )
+                )
+            elif filters.affordability_category == AffordabilityCategory.EXPENSIVE:
+                conditions.append(
+                    and_(
+                        TuitionData.tuition_in_state >= 40000,
+                        TuitionData.tuition_in_state < 55000,
+                    )
+                )
+            else:  # VERY_EXPENSIVE
+                conditions.append(TuitionData.tuition_in_state >= 55000)
 
         if filters.has_comprehensive_data is not None:
             if filters.has_comprehensive_data:
-                query = query.filter(
-                    TuitionData.tuition_in_state.isnot(None),
-                    TuitionData.tuition_out_state.isnot(None),
-                    TuitionData.room_board_on_campus.isnot(None),
+                conditions.append(
+                    and_(
+                        TuitionData.has_tuition_data == True,
+                        TuitionData.has_fees_data == True,
+                        TuitionData.has_living_data == True,
+                    )
                 )
 
-        if filters.validation_status:
-            query = query.filter(
+        if filters.validation_status is not None:
+            conditions.append(
                 TuitionData.validation_status == filters.validation_status
             )
 
-        # Count total results
+        if filters.state is not None:
+            conditions.append(Institution.state == filters.state)
+
+        if conditions:
+            query = query.filter(and_(*conditions))
+
+        # Get total count
         total_count = query.count()
 
-        # Apply pagination
-        offset = (page - 1) * per_page
-        results = query.offset(offset).limit(per_page).all()
-
-        # Apply affordability category filter in memory if needed
-        if filters.affordability_category:
-            filtered_results = []
-            for tuition_data, institution in results:
-                if (
-                    tuition_data.affordability_category
-                    == filters.affordability_category.value
-                ):
-                    filtered_results.append((tuition_data, institution))
-            results = filtered_results
+        # Apply pagination and ordering
+        results = (
+            query.order_by(desc(TuitionData.data_completeness_score))
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
 
         return results, total_count
 
-    def calculate_projections(
-        self, ipeds_id: int, request: ProjectionRequest
-    ) -> Optional[Dict[str, Any]]:
-        """Calculate tuition projections for an institution"""
+    def get_affordability_analysis(
+        self, request: AffordabilityRequest
+    ) -> Dict[str, Any]:
+        """Analyze affordability for a given income and residency status"""
+        query = self.db.query(TuitionData).filter(TuitionData.has_tuition_data == True)
 
-        tuition_data = self.get_by_ipeds_id(ipeds_id)
-        if not tuition_data:
-            return None
+        # Choose the appropriate tuition field based on residency
+        if request.residency_status == "in_state":
+            tuition_field = TuitionData.tuition_fees_in_state
+        else:
+            tuition_field = TuitionData.tuition_fees_out_state
 
-        calculator = TuitionProjectionCalculator()
-        projections = calculator.calculate_projections(
-            tuition_data=tuition_data,
-            years=request.years,
-            custom_inflation_rate=request.inflation_rate,
-        )
+        # Calculate affordability thresholds based on income
+        # Rule of thumb: total education costs shouldn't exceed 10-15% of gross income
+        max_affordable_annual = request.family_income * 0.125  # 12.5%
 
-        return {
-            "ipeds_id": ipeds_id,
-            "base_year": "2023-24",
-            "projections": projections,
-            "methodology": "Education inflation rates applied to base year data",
-            "custom_inflation_rate": request.inflation_rate,
-        }
+        affordable_count = query.filter(tuition_field <= max_affordable_annual).count()
+        total_count = query.count()
 
-    def analyze_affordability(
-        self, ipeds_id: int, request: AffordabilityRequest
-    ) -> Optional[Dict[str, Any]]:
-        """Analyze affordability for an institution and household income"""
-
-        tuition_data = self.get_by_ipeds_id(ipeds_id)
-        if not tuition_data:
-            return None
-
-        return tuition_data.analyze_affordability(
-            household_income=request.household_income,
-            residency=request.residency_status,
-        )
-
-    def get_analytics(self) -> Dict[str, Any]:
-        """Generate comprehensive tuition analytics"""
-
-        # Get all institutions with tuition data
-        all_data = (
-            self.db.query(TuitionData)
-            .filter(TuitionData.has_tuition_data == True)
-            .all()
-        )
-
-        if not all_data:
-            return {}
-
-        # Extract values for statistics
-        in_state_tuitions = [d.tuition_in_state for d in all_data if d.tuition_in_state]
-        out_state_tuitions = [
-            d.tuition_out_state for d in all_data if d.tuition_out_state
+        # Get distribution by price ranges
+        price_ranges = [
+            ("under_10k", tuition_field < 10000),
+            ("10k_to_25k", and_(tuition_field >= 10000, tuition_field < 25000)),
+            ("25k_to_40k", and_(tuition_field >= 25000, tuition_field < 40000)),
+            ("40k_to_55k", and_(tuition_field >= 40000, tuition_field < 55000)),
+            ("over_55k", tuition_field >= 55000),
         ]
-        room_board_costs = [
-            d.room_board_on_campus for d in all_data if d.room_board_on_campus
-        ]
-        books_costs = [d.books_supplies for d in all_data if d.books_supplies]
 
-        # Calculate statistics
-        def calculate_stats(values):
-            if not values:
-                return None
-            return {
-                "count": len(values),
-                "mean": round(np.mean(values), 2),
-                "median": round(np.median(values), 2),
-                "p25": round(np.percentile(values, 25), 2),
-                "p75": round(np.percentile(values, 75), 2),
-                "min": round(min(values), 2),
-                "max": round(max(values), 2),
+        distribution = {}
+        for range_name, condition in price_ranges:
+            count = query.filter(condition).count()
+            distribution[range_name] = {
+                "count": count,
+                "percentage": (
+                    round((count / total_count) * 100, 1) if total_count > 0 else 0
+                ),
             }
 
-        # Create affordability distribution
-        affordability_distribution = {}
-        for data in all_data:
-            category = data.affordability_category
-            affordability_distribution[category] = (
-                affordability_distribution.get(category, 0) + 1
-            )
+        return {
+            "total_institutions": total_count,
+            "affordable_institutions": affordable_count,
+            "affordability_rate": (
+                round((affordable_count / total_count) * 100, 1)
+                if total_count > 0
+                else 0
+            ),
+            "max_affordable_annual_cost": round(max_affordable_annual, 2),
+            "residency_status": request.residency_status,
+            "family_income": request.family_income,
+            "price_distribution": distribution,
+            "recommendation": self._get_affordability_recommendation(
+                request, affordable_count, total_count
+            ),
+        }
+
+    def get_analytics_summary(self) -> Dict[str, Any]:
+        """Get comprehensive analytics summary"""
+        total_records = self.db.query(TuitionData).count()
+
+        if total_records == 0:
+            return {"error": "No tuition data available"}
+
+        # Basic statistics
+        stats = {}
+
+        # In-state tuition statistics
+        in_state_query = self.db.query(TuitionData.tuition_in_state).filter(
+            TuitionData.tuition_in_state.isnot(None)
+        )
+        in_state_values = [row[0] for row in in_state_query.all()]
+
+        if in_state_values:
+            stats["in_state_tuition"] = {
+                "count": len(in_state_values),
+                "mean": round(np.mean(in_state_values), 2),
+                "median": round(np.median(in_state_values), 2),
+                "min": round(min(in_state_values), 2),
+                "max": round(max(in_state_values), 2),
+                "p25": round(np.percentile(in_state_values, 25), 2),
+                "p75": round(np.percentile(in_state_values, 75), 2),
+            }
+
+        # Out-of-state tuition statistics
+        out_state_query = self.db.query(TuitionData.tuition_out_state).filter(
+            TuitionData.tuition_out_state.isnot(None)
+        )
+        out_state_values = [row[0] for row in out_state_query.all()]
+
+        if out_state_values:
+            stats["out_state_tuition"] = {
+                "count": len(out_state_values),
+                "mean": round(np.mean(out_state_values), 2),
+                "median": round(np.median(out_state_values), 2),
+                "min": round(min(out_state_values), 2),
+                "max": round(max(out_state_values), 2),
+                "p25": round(np.percentile(out_state_values, 25), 2),
+                "p75": round(np.percentile(out_state_values, 75), 2),
+            }
 
         # Data quality metrics
-        institutions_with_comprehensive_data = sum(
-            1 for d in all_data if d.has_comprehensive_data
-        )
+        data_quality = {
+            "total_records": total_records,
+            "with_tuition_data": self.db.query(TuitionData)
+            .filter(TuitionData.has_tuition_data == True)
+            .count(),
+            "with_fees_data": self.db.query(TuitionData)
+            .filter(TuitionData.has_fees_data == True)
+            .count(),
+            "with_living_data": self.db.query(TuitionData)
+            .filter(TuitionData.has_living_data == True)
+            .count(),
+            "comprehensive_data": self.db.query(TuitionData)
+            .filter(
+                and_(
+                    TuitionData.has_tuition_data == True,
+                    TuitionData.has_fees_data == True,
+                    TuitionData.has_living_data == True,
+                )
+            )
+            .count(),
+        }
 
-        average_completeness_score = round(
-            np.mean([d.data_completeness_score for d in all_data]), 1
-        )
+        # Validation status distribution
+        validation_stats = {}
+        for status in ValidationStatus:
+            count = (
+                self.db.query(TuitionData)
+                .filter(TuitionData.validation_status == status)
+                .count()
+            )
+            validation_stats[status.value] = count
 
         return {
             "dataset_info": {
-                "total_institutions": len(all_data),
+                "total_institutions": total_records,
+                "last_updated": datetime.utcnow().isoformat(),
                 "academic_year": "2023-24",
-                "last_updated": datetime.now().isoformat(),
-                "data_source": "IPEDS IC2023_AY",
             },
-            "tuition_statistics": {
-                "in_state_tuition": calculate_stats(in_state_tuitions),
-                "out_of_state_tuition": calculate_stats(out_state_tuitions),
-                "room_and_board": calculate_stats(room_board_costs),
-                "books_and_supplies": calculate_stats(books_costs),
-            },
-            "affordability_distribution": affordability_distribution,
-            "data_quality_metrics": {
-                "institutions_with_comprehensive_data": institutions_with_comprehensive_data,
-                "comprehensive_data_rate": round(
-                    (institutions_with_comprehensive_data / len(all_data)) * 100, 1
-                ),
-                "average_completeness_score": average_completeness_score,
-            },
+            "tuition_statistics": stats,
+            "data_quality_metrics": data_quality,
+            "validation_status_distribution": validation_stats,
+            "affordability_distribution": self._calculate_affordability_distribution(),
         }
 
-    def get_institutions_by_affordability(
-        self, category: str, limit: int = 50
-    ) -> List[Tuple[TuitionData, Institution]]:
-        """Get institutions filtered by affordability category"""
-
-        # Get all institutions with tuition data
-        results = (
-            self.db.query(TuitionData, Institution)
-            .join(Institution, TuitionData.ipeds_id == Institution.ipeds_id)
-            .filter(TuitionData.has_tuition_data == True)
-            .limit(limit * 2)  # Get more than needed since we'll filter in memory
-            .all()
-        )
-
-        # Filter by affordability category in memory
-        filtered_results = []
-        for tuition_data, institution in results:
-            if tuition_data.affordability_category == category:
-                filtered_results.append((tuition_data, institution))
-                if len(filtered_results) >= limit:
-                    break
-
-        return filtered_results
-
-    def bulk_import(self, tuition_records: List[Dict[str, Any]]) -> Dict[str, int]:
-        """Bulk import tuition data records"""
-
-        created_count = 0
-        updated_count = 0
-        error_count = 0
-
-        for record in tuition_records:
-            try:
-                ipeds_id = record.get("ipeds_id")
-                if not ipeds_id:
-                    error_count += 1
-                    continue
-
-                # Check if record exists
-                existing = self.get_by_ipeds_id(ipeds_id)
-
-                if existing:
-                    # Update existing record
-                    for field, value in record.items():
-                        if hasattr(existing, field) and field != "id":
-                            setattr(existing, field, value)
-
-                    self._update_data_quality_indicators(existing)
-                    updated_count += 1
-                else:
-                    # Create new record
-                    new_record = TuitionData(**record)
-                    self._update_data_quality_indicators(new_record)
-                    self.db.add(new_record)
-                    created_count += 1
-
-            except Exception as e:
-                logger.error(
-                    f"Error processing record for IPEDS {record.get('ipeds_id')}: {e}"
-                )
-                error_count += 1
-
-        # Commit all changes
-        try:
-            self.db.commit()
-            logger.info(
-                f"Bulk import completed: {created_count} created, {updated_count} updated, {error_count} errors"
-            )
-        except Exception as e:
-            self.db.rollback()
-            logger.error(f"Bulk import failed: {e}")
-            raise
-
-        return {
-            "created": created_count,
-            "updated": updated_count,
-            "errors": error_count,
-            "total": len(tuition_records),
-        }
-
-    # Private Helper Methods
-    def _update_data_quality_indicators(self, tuition_data: TuitionData):
+    # Private helper methods
+    def _update_data_quality_indicators(self, tuition_data: TuitionData) -> None:
         """Update data quality indicators for a tuition record"""
-
-        # Check what data is available
-        tuition_data.has_tuition_data = bool(
-            tuition_data.tuition_in_state or tuition_data.tuition_out_state
+        # Check if has tuition data
+        tuition_data.has_tuition_data = (
+            tuition_data.tuition_in_state is not None
+            or tuition_data.tuition_out_state is not None
         )
 
-        tuition_data.has_fees_data = bool(
-            tuition_data.required_fees_in_state or tuition_data.required_fees_out_state
+        # Check if has fees data
+        tuition_data.has_fees_data = (
+            tuition_data.required_fees_in_state is not None
+            or tuition_data.required_fees_out_state is not None
         )
 
-        tuition_data.has_living_data = bool(
-            tuition_data.room_board_on_campus
-            or tuition_data.books_supplies
-            or tuition_data.personal_expenses
+        # Check if has living data
+        tuition_data.has_living_data = (
+            tuition_data.room_board_on_campus is not None
+            or tuition_data.room_board_off_campus is not None
+            or tuition_data.books_supplies is not None
         )
 
-        # Calculate completeness score
+        # Calculate completeness score (0-100)
         score = 0
-        if tuition_data.tuition_in_state:
-            score += 25
-        if tuition_data.tuition_out_state:
-            score += 25
-        if tuition_data.room_board_on_campus:
-            score += 15
-        if tuition_data.books_supplies:
-            score += 10
-        if tuition_data.personal_expenses:
-            score += 10
-        if tuition_data.required_fees_in_state or tuition_data.required_fees_out_state:
-            score += 15
+        total_fields = 0
 
-        tuition_data.data_completeness_score = score
+        # Core tuition fields (40% weight)
+        tuition_fields = [
+            tuition_data.tuition_in_state,
+            tuition_data.tuition_out_state,
+            tuition_data.tuition_fees_in_state,
+            tuition_data.tuition_fees_out_state,
+        ]
+        for field in tuition_fields:
+            total_fields += 10
+            if field is not None and field > 0:
+                score += 10
 
-        # Update validation status
-        if score >= 85:
-            tuition_data.validation_status = "clean"
-        elif score >= 50:
-            tuition_data.validation_status = "incomplete"
-        elif score > 0:
-            tuition_data.validation_status = "pending"
+        # Living expense fields (35% weight)
+        living_fields = [
+            tuition_data.room_board_on_campus,
+            tuition_data.room_board_off_campus,
+            tuition_data.books_supplies,
+            tuition_data.personal_expenses,
+            tuition_data.transportation,
+        ]
+        for field in living_fields:
+            total_fields += 7
+            if field is not None and field > 0:
+                score += 7
+
+        # Fee fields (25% weight)
+        fee_fields = [
+            tuition_data.required_fees_in_state,
+            tuition_data.required_fees_out_state,
+        ]
+        for field in fee_fields:
+            total_fields += 12
+            if field is not None and field > 0:
+                score += 12
+
+        tuition_data.data_completeness_score = (
+            min(100, score) if total_fields > 0 else 0
+        )
+
+        # Set validation status based on data quality
+        if tuition_data.data_completeness_score >= 80:
+            tuition_data.validation_status = ValidationStatus.VALIDATED
+        elif tuition_data.data_completeness_score >= 50:
+            tuition_data.validation_status = ValidationStatus.NEEDS_REVIEW
         else:
-            tuition_data.validation_status = "error"
+            tuition_data.validation_status = ValidationStatus.PENDING
 
+    def _calculate_affordability_distribution(self) -> Dict[AffordabilityCategory, int]:
+        """Calculate distribution of institutions by affordability category"""
+        distribution = {}
 
-class TuitionProjectionCalculator:
-    """Calculate tuition projections based on historical trends"""
+        for category in AffordabilityCategory:
+            if category == AffordabilityCategory.VERY_AFFORDABLE:
+                count = (
+                    self.db.query(TuitionData)
+                    .filter(TuitionData.tuition_in_state < 10000)
+                    .count()
+                )
+            elif category == AffordabilityCategory.AFFORDABLE:
+                count = (
+                    self.db.query(TuitionData)
+                    .filter(
+                        and_(
+                            TuitionData.tuition_in_state >= 10000,
+                            TuitionData.tuition_in_state < 25000,
+                        )
+                    )
+                    .count()
+                )
+            elif category == AffordabilityCategory.MODERATE:
+                count = (
+                    self.db.query(TuitionData)
+                    .filter(
+                        and_(
+                            TuitionData.tuition_in_state >= 25000,
+                            TuitionData.tuition_in_state < 40000,
+                        )
+                    )
+                    .count()
+                )
+            elif category == AffordabilityCategory.EXPENSIVE:
+                count = (
+                    self.db.query(TuitionData)
+                    .filter(
+                        and_(
+                            TuitionData.tuition_in_state >= 40000,
+                            TuitionData.tuition_in_state < 55000,
+                        )
+                    )
+                    .count()
+                )
+            else:  # VERY_EXPENSIVE
+                count = (
+                    self.db.query(TuitionData)
+                    .filter(TuitionData.tuition_in_state >= 55000)
+                    .count()
+                )
 
-    def __init__(self):
-        # Education inflation rates (higher than general CPI)
-        self.default_inflation_rates = {
-            2024: 0.045,  # 4.5%
-            2025: 0.042,  # 4.2%
-            2026: 0.040,  # 4.0%
-            2027: 0.038,  # 3.8%
-            2028: 0.035,  # 3.5%
-            2029: 0.035,  # 3.5% (default)
-            2030: 0.035,  # 3.5% (default)
-        }
+            distribution[category] = count
 
-    def calculate_projections(
-        self,
-        tuition_data: TuitionData,
-        years: int = 5,
-        custom_inflation_rate: Optional[float] = None,
-        base_year: int = 2023,
-    ) -> List[Dict[str, Any]]:
-        """Calculate projections for multiple years"""
+        return distribution
 
-        projections = []
+    def _get_affordability_recommendation(
+        self, request: AffordabilityRequest, affordable_count: int, total_count: int
+    ) -> str:
+        """Generate affordability recommendation"""
+        affordability_rate = (
+            (affordable_count / total_count) * 100 if total_count > 0 else 0
+        )
 
-        # Base values from the tuition data
-        base_tuition_in = tuition_data.tuition_in_state or 0
-        base_tuition_out = tuition_data.tuition_out_state or base_tuition_in * 1.5
-        base_room_board = tuition_data.room_board_on_campus or 12000
-        base_books = tuition_data.books_supplies or 1200
-        base_personal = tuition_data.personal_expenses or 3000
-
-        for target_year in range(base_year + 1, base_year + years + 1):
-            if custom_inflation_rate is not None:
-                # Use custom rate
-                rate = custom_inflation_rate
-                cumulative_rate = (1 + rate) ** (target_year - base_year)
-            else:
-                # Use graduated rates
-                cumulative_rate = 1.0
-                for year in range(base_year + 1, target_year + 1):
-                    rate = self.default_inflation_rates.get(year, 0.035)
-                    cumulative_rate *= 1 + rate
-
-            projection = {
-                "academic_year": f"{target_year}-{str(target_year+1)[2:]}",
-                "projected_in_state_tuition": round(
-                    base_tuition_in * cumulative_rate, 2
-                ),
-                "projected_out_state_tuition": round(
-                    base_tuition_out * cumulative_rate, 2
-                ),
-                "projected_room_board": round(base_room_board * cumulative_rate, 2),
-                "projected_books_supplies": round(base_books * cumulative_rate, 2),
-                "projected_personal_expenses": round(
-                    base_personal * cumulative_rate, 2
-                ),
-                "projected_total_cost_in_state": round(
-                    (base_tuition_in + base_room_board + base_books + base_personal)
-                    * cumulative_rate,
-                    2,
-                ),
-                "projected_total_cost_out_state": round(
-                    (base_tuition_out + base_room_board + base_books + base_personal)
-                    * cumulative_rate,
-                    2,
-                ),
-                "inflation_rate_used": custom_inflation_rate
-                or self.default_inflation_rates.get(target_year, 0.035),
-                "confidence_level": (
-                    "high"
-                    if target_year <= 2025
-                    else "medium" if target_year <= 2027 else "low"
-                ),
-            }
-
-            projections.append(projection)
-
-        return projections
+        if affordability_rate >= 75:
+            return "Excellent! You have many affordable options to choose from."
+        elif affordability_rate >= 50:
+            return "Good news! You have a solid selection of affordable institutions."
+        elif affordability_rate >= 25:
+            return "Consider expanding your search criteria or exploring financial aid options."
+        else:
+            return "Limited affordable options. Strongly recommend exploring financial aid, scholarships, and community college transfer programs."

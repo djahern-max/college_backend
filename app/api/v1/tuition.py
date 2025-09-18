@@ -1,21 +1,19 @@
 # app/api/v1/tuition.py
 """
-FastAPI endpoints for tuition data and projections
-Updated to match new TuitionData model and schema structure
+Refactored FastAPI endpoints for tuition data using service layer
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
-from datetime import datetime
 import logging
-import numpy as np
 
 from app.core.database import get_db
-from app.models.tuition import TuitionData
-from app.models.institution import Institution
+from app.services.tuition import TuitionService
 from app.schemas.tuition import (
     TuitionDataResponse,
+    TuitionDataCreate,
+    TuitionDataUpdate,
     TuitionProjectionResponse,
     TuitionAnalyticsResponse,
     AffordabilityRequest,
@@ -24,6 +22,7 @@ from app.schemas.tuition import (
     TuitionSearchFilters,
     TuitionSearchResponse,
     InstitutionWithTuitionData,
+    AffordabilityCategory,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,7 +46,7 @@ class TuitionProjectionCalculator:
 
     def calculate_projections(
         self,
-        tuition_data: TuitionData,
+        tuition_data,
         years: int = 5,
         custom_inflation_rate: Optional[float] = None,
         base_year: int = 2023,
@@ -116,43 +115,98 @@ class TuitionProjectionCalculator:
 async def get_tuition_by_institution(ipeds_id: int, db: Session = Depends(get_db)):
     """Get tuition data for a specific institution"""
     try:
-        # Query tuition data with institution info
-        result = (
-            db.query(TuitionData, Institution)
-            .join(Institution, TuitionData.ipeds_id == Institution.ipeds_id)
-            .filter(TuitionData.ipeds_id == ipeds_id)
-            .first()
-        )
+        tuition_service = TuitionService(db)
+        tuition_data = tuition_service.get_by_ipeds_id(ipeds_id)
 
-        if not result:
+        if not tuition_data:
             raise HTTPException(
                 status_code=404, detail="Institution tuition data not found"
             )
 
-        tuition_data, institution = result
-
-        # Convert to response using the model's to_dict method
-        response_data = tuition_data.to_dict()
-        response_data["institution_name"] = institution.name
-
-        return TuitionDataResponse(**response_data)
+        return TuitionDataResponse(**tuition_data.to_dict())
 
     except Exception as e:
         logger.error(f"Error fetching tuition data for {ipeds_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@router.post("/", response_model=TuitionDataResponse)
+async def create_tuition_data(
+    tuition_data: TuitionDataCreate, db: Session = Depends(get_db)
+):
+    """Create new tuition data record"""
+    try:
+        tuition_service = TuitionService(db)
+
+        # Check if data already exists for this institution
+        existing = tuition_service.get_by_ipeds_id(tuition_data.ipeds_id)
+        if existing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Tuition data already exists for institution {tuition_data.ipeds_id}",
+            )
+
+        created_tuition = tuition_service.create(tuition_data)
+        return TuitionDataResponse(**created_tuition.to_dict())
+
+    except Exception as e:
+        logger.error(f"Error creating tuition data: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.put("/institution/{ipeds_id}", response_model=TuitionDataResponse)
+async def update_tuition_data(
+    ipeds_id: int, update_data: TuitionDataUpdate, db: Session = Depends(get_db)
+):
+    """Update tuition data for an institution"""
+    try:
+        tuition_service = TuitionService(db)
+        updated_tuition = tuition_service.update(ipeds_id, update_data)
+
+        if not updated_tuition:
+            raise HTTPException(
+                status_code=404, detail="Institution tuition data not found"
+            )
+
+        return TuitionDataResponse(**updated_tuition.to_dict())
+
+    except Exception as e:
+        logger.error(f"Error updating tuition data for {ipeds_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.delete("/institution/{ipeds_id}")
+async def delete_tuition_data(ipeds_id: int, db: Session = Depends(get_db)):
+    """Delete tuition data for an institution"""
+    try:
+        tuition_service = TuitionService(db)
+        deleted = tuition_service.delete(ipeds_id)
+
+        if not deleted:
+            raise HTTPException(
+                status_code=404, detail="Institution tuition data not found"
+            )
+
+        return {"message": f"Tuition data deleted for institution {ipeds_id}"}
+
+    except Exception as e:
+        logger.error(f"Error deleting tuition data for {ipeds_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @router.get("/institution/{ipeds_id}/projections")
 async def get_tuition_projections(
     ipeds_id: int,
-    request: ProjectionRequest = Depends(),
+    years: int = Query(5, ge=1, le=10, description="Number of years to project"),
+    inflation_rate: Optional[float] = Query(
+        None, ge=0.0, le=0.15, description="Custom inflation rate"
+    ),
     db: Session = Depends(get_db),
 ):
     """Get tuition projections for a specific institution"""
     try:
-        tuition_data = (
-            db.query(TuitionData).filter(TuitionData.ipeds_id == ipeds_id).first()
-        )
+        tuition_service = TuitionService(db)
+        tuition_data = tuition_service.get_by_ipeds_id(ipeds_id)
 
         if not tuition_data:
             raise HTTPException(
@@ -162,8 +216,8 @@ async def get_tuition_projections(
         calculator = TuitionProjectionCalculator()
         projections = calculator.calculate_projections(
             tuition_data=tuition_data,
-            years=request.years,
-            custom_inflation_rate=request.inflation_rate,
+            years=years,
+            custom_inflation_rate=inflation_rate,
         )
 
         return {
@@ -171,7 +225,7 @@ async def get_tuition_projections(
             "projections": projections,
             "projection_methodology": "Education inflation rates applied to base year data",
             "base_year": "2023-24",
-            "custom_inflation_rate": request.inflation_rate,
+            "custom_inflation_rate": inflation_rate,
         }
 
     except Exception as e:
@@ -179,101 +233,67 @@ async def get_tuition_projections(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/analytics", response_model=TuitionAnalyticsResponse)
-async def get_tuition_analytics(db: Session = Depends(get_db)):
-    """Get comprehensive tuition analytics"""
+@router.get("/search", response_model=TuitionSearchResponse)
+async def search_institutions(
+    # Tuition filters
+    min_tuition_in_state: Optional[float] = Query(None, ge=0),
+    max_tuition_in_state: Optional[float] = Query(None, ge=0),
+    min_tuition_out_state: Optional[float] = Query(None, ge=0),
+    max_tuition_out_state: Optional[float] = Query(None, ge=0),
+    min_total_cost: Optional[float] = Query(None, ge=0),
+    max_total_cost: Optional[float] = Query(None, ge=0),
+    affordability_category: Optional[AffordabilityCategory] = Query(None),
+    has_comprehensive_data: Optional[bool] = Query(None),
+    state: Optional[str] = Query(None, max_length=2),
+    # Pagination
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """Search institutions with tuition data"""
     try:
-        # Get all tuition data for analytics
-        all_data = (
-            db.query(TuitionData).filter(TuitionData.has_tuition_data == True).all()
+        # Build filters
+        filters = TuitionSearchFilters(
+            min_tuition_in_state=min_tuition_in_state,
+            max_tuition_in_state=max_tuition_in_state,
+            min_tuition_out_state=min_tuition_out_state,
+            max_tuition_out_state=max_tuition_out_state,
+            min_total_cost=min_total_cost,
+            max_total_cost=max_total_cost,
+            affordability_category=affordability_category,
+            has_comprehensive_data=has_comprehensive_data,
+            state=state,
         )
 
-        if not all_data:
-            raise HTTPException(status_code=404, detail="No tuition data available")
+        tuition_service = TuitionService(db)
+        results, total_count = tuition_service.search_institutions(
+            filters=filters, limit=limit, offset=offset
+        )
 
-        # Calculate statistics
-        in_state_tuitions = [d.tuition_in_state for d in all_data if d.tuition_in_state]
-        out_state_tuitions = [
-            d.tuition_out_state for d in all_data if d.tuition_out_state
-        ]
-        room_board_costs = [
-            d.room_board_on_campus for d in all_data if d.room_board_on_campus
-        ]
+        # Convert results to response format
+        tuition_responses = []
+        for tuition_data in results:
+            tuition_responses.append(TuitionDataResponse(**tuition_data.to_dict()))
 
-        def calculate_stats(values):
-            if not values:
-                return None
-            return {
-                "count": len(values),
-                "mean": round(np.mean(values), 2),
-                "median": round(np.median(values), 2),
-                "p25": round(np.percentile(values, 25), 2),
-                "p75": round(np.percentile(values, 75), 2),
-                "min": round(min(values), 2),
-                "max": round(max(values), 2),
-            }
-
-        # Create affordability distribution
-        affordability_distribution = {}
-        for data in all_data:
-            category = data.affordability_category
-            affordability_distribution[category] = (
-                affordability_distribution.get(category, 0) + 1
-            )
-
-        analytics = {
-            "dataset_info": {
-                "total_institutions": len(all_data),
-                "academic_year": "2023-24",
-                "last_updated": datetime.now().isoformat(),
-            },
-            "tuition_statistics": {
-                "in_state_tuition": calculate_stats(in_state_tuitions),
-                "out_of_state_tuition": calculate_stats(out_state_tuitions),
-                "room_and_board": calculate_stats(room_board_costs),
-            },
-            "affordability_distribution": affordability_distribution,
-            "data_quality_metrics": {
-                "institutions_with_comprehensive_data": sum(
-                    1 for d in all_data if d.has_comprehensive_data
-                ),
-                "average_completeness_score": round(
-                    np.mean([d.data_completeness_score for d in all_data]), 1
-                ),
-            },
-        }
-
-        return TuitionAnalyticsResponse(**analytics)
+        return TuitionSearchResponse(
+            filters=filters,
+            total_count=total_count,
+            results=tuition_responses,
+        )
 
     except Exception as e:
-        logger.error(f"Error generating analytics: {e}")
+        logger.error(f"Error searching institutions: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/affordability/analyze")
+@router.post("/affordability-analysis", response_model=AffordabilityAnalysis)
 async def analyze_affordability(
-    ipeds_id: int,
-    request: AffordabilityRequest,
-    db: Session = Depends(get_db),
+    request: AffordabilityRequest, db: Session = Depends(get_db)
 ):
-    """Analyze affordability for a specific institution and household income"""
+    """Analyze affordability for a given income and residency status"""
     try:
-        tuition_data = (
-            db.query(TuitionData).filter(TuitionData.ipeds_id == ipeds_id).first()
-        )
-
-        if not tuition_data:
-            raise HTTPException(
-                status_code=404, detail="Institution tuition data not found"
-            )
-
-        analysis = tuition_data.analyze_affordability(
-            household_income=request.household_income,
-            residency=request.residency_status,
-        )
-
-        if "error" in analysis:
-            raise HTTPException(status_code=400, detail=analysis["error"])
+        tuition_service = TuitionService(db)
+        analysis = tuition_service.get_affordability_analysis(request)
 
         return AffordabilityAnalysis(**analysis)
 
@@ -282,114 +302,93 @@ async def analyze_affordability(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/search")
-async def search_institutions(
-    min_tuition_in_state: Optional[float] = Query(None, ge=0),
-    max_tuition_in_state: Optional[float] = Query(None, ge=0),
-    min_tuition_out_state: Optional[float] = Query(None, ge=0),
-    max_tuition_out_state: Optional[float] = Query(None, ge=0),
-    affordability_category: Optional[str] = Query(None),
-    state: Optional[str] = Query(None, max_length=2),
-    has_comprehensive_data: Optional[bool] = Query(None),
-    limit: int = Query(50, le=100),
-    offset: int = Query(0, ge=0),
-    db: Session = Depends(get_db),
-):
-    """Search institutions by tuition criteria"""
+@router.get("/analytics", response_model=TuitionAnalyticsResponse)
+async def get_tuition_analytics(db: Session = Depends(get_db)):
+    """Get comprehensive tuition analytics"""
     try:
-        # Build query
-        query = (
-            db.query(TuitionData, Institution)
-            .join(Institution, TuitionData.ipeds_id == Institution.ipeds_id)
-            .filter(TuitionData.has_tuition_data == True)
-        )
+        tuition_service = TuitionService(db)
+        analytics = tuition_service.get_analytics_summary()
 
-        # Apply filters
-        if min_tuition_in_state is not None:
-            query = query.filter(TuitionData.tuition_in_state >= min_tuition_in_state)
-        if max_tuition_in_state is not None:
-            query = query.filter(TuitionData.tuition_in_state <= max_tuition_in_state)
-        if min_tuition_out_state is not None:
-            query = query.filter(TuitionData.tuition_out_state >= min_tuition_out_state)
-        if max_tuition_out_state is not None:
-            query = query.filter(TuitionData.tuition_out_state <= max_tuition_out_state)
-        if state:
-            query = query.filter(Institution.state == state.upper())
-        if has_comprehensive_data is not None:
-            if has_comprehensive_data:
-                query = query.filter(
-                    TuitionData.tuition_in_state.isnot(None),
-                    TuitionData.tuition_out_state.isnot(None),
-                    TuitionData.room_board_on_campus.isnot(None),
-                )
+        if "error" in analytics:
+            raise HTTPException(status_code=404, detail=analytics["error"])
 
-        # Count total results
-        total_count = query.count()
-
-        # Apply pagination and get results
-        results = query.offset(offset).limit(limit).all()
-
-        # Format results
-        institutions = []
-        for tuition_data, institution in results:
-            institution_data = {
-                "ipeds_id": institution.ipeds_id,
-                "name": institution.name,
-                "city": institution.city,
-                "state": institution.state,
-                "control_type": (
-                    institution.control_type.value if institution.control_type else None
-                ),
-                "size_category": (
-                    institution.size_category.value
-                    if institution.size_category
-                    else None
-                ),
-                "tuition_data": TuitionDataResponse(**tuition_data.to_dict()),
-                "has_tuition_data": tuition_data.has_tuition_data,
-                "tuition_summary": (
-                    f"In-state: ${tuition_data.tuition_in_state:,.0f}"
-                    if tuition_data.tuition_in_state
-                    else "Data not available"
-                ),
-            }
-            institutions.append(InstitutionWithTuitionData(**institution_data))
-
-        return TuitionSearchResponse(
-            filters=TuitionSearchFilters(
-                min_tuition_in_state=min_tuition_in_state,
-                max_tuition_in_state=max_tuition_in_state,
-                min_tuition_out_state=min_tuition_out_state,
-                max_tuition_out_state=max_tuition_out_state,
-                affordability_category=affordability_category,
-                state=state,
-                has_comprehensive_data=has_comprehensive_data,
-            ),
-            total_count=total_count,
-            results=institutions,
-        )
+        return TuitionAnalyticsResponse(**analytics)
 
     except Exception as e:
-        logger.error(f"Error searching institutions: {e}")
+        logger.error(f"Error getting tuition analytics: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@router.post("/bulk-create")
+async def bulk_create_tuition_data(
+    tuition_records: List[TuitionDataCreate], db: Session = Depends(get_db)
+):
+    """Bulk create tuition data records - useful for data imports"""
+    try:
+        if len(tuition_records) > 1000:
+            raise HTTPException(
+                status_code=400, detail="Maximum 1000 records per bulk operation"
+            )
+
+        tuition_service = TuitionService(db)
+        created_count = tuition_service.bulk_create(tuition_records)
+
+        return {
+            "message": f"Successfully created {created_count} tuition records",
+            "created_count": created_count,
+        }
+
+    except Exception as e:
+        logger.error(f"Error bulk creating tuition data: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/stats/summary")
+async def get_tuition_stats_summary(db: Session = Depends(get_db)):
+    """Get quick tuition statistics summary"""
+    try:
+        tuition_service = TuitionService(db)
+        analytics = tuition_service.get_analytics_summary()
+
+        if "error" in analytics:
+            raise HTTPException(status_code=404, detail=analytics["error"])
+
+        # Return simplified stats for dashboard use
+        return {
+            "total_institutions": analytics["dataset_info"]["total_institutions"],
+            "data_quality": analytics["data_quality_metrics"],
+            "tuition_ranges": {
+                "in_state": analytics["tuition_statistics"].get("in_state_tuition", {}),
+                "out_state": analytics["tuition_statistics"].get(
+                    "out_state_tuition", {}
+                ),
+            },
+            "affordability_distribution": analytics["affordability_distribution"],
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting tuition stats summary: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# Integration endpoint for frontend institution pages
 @router.get("/institution/{ipeds_id}/full")
 async def get_institution_with_tuition(ipeds_id: int, db: Session = Depends(get_db)):
     """Get complete institution information with tuition data for frontend display"""
     try:
-        # Query institution with tuition data
-        result = (
-            db.query(Institution, TuitionData)
-            .outerjoin(TuitionData, Institution.ipeds_id == TuitionData.ipeds_id)
-            .filter(Institution.ipeds_id == ipeds_id)
-            .first()
+        from app.models.institution import Institution
+
+        # Query institution with tuition data using service
+        tuition_service = TuitionService(db)
+        tuition_data = tuition_service.get_by_ipeds_id(ipeds_id)
+
+        # Get institution data
+        institution = (
+            db.query(Institution).filter(Institution.ipeds_id == ipeds_id).first()
         )
 
-        if not result:
+        if not institution:
             raise HTTPException(status_code=404, detail="Institution not found")
-
-        institution, tuition_data = result
 
         # Build response
         response = {
@@ -409,14 +408,18 @@ async def get_institution_with_tuition(ipeds_id: int, db: Session = Depends(get_
 
         if tuition_data:
             response["tuition_data"] = TuitionDataResponse(**tuition_data.to_dict())
-            response["tuition_summary"] = (
-                f"In-state: ${tuition_data.tuition_in_state:,.0f}, Out-of-state: ${tuition_data.tuition_out_state:,.0f}"
-            )
+            if tuition_data.tuition_in_state and tuition_data.tuition_out_state:
+                response["tuition_summary"] = (
+                    f"In-state: ${tuition_data.tuition_in_state:,.0f}, "
+                    f"Out-of-state: ${tuition_data.tuition_out_state:,.0f}"
+                )
+            else:
+                response["tuition_summary"] = "Partial tuition data available"
         else:
             response["tuition_data"] = None
             response["tuition_summary"] = "Tuition data not available"
 
-        return InstitutionWithTuitionData(**response)
+        return response
 
     except Exception as e:
         logger.error(

@@ -7,26 +7,18 @@ from pydantic import BaseModel, Field, validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
-
-
-class ValidationStatus(str, Enum):
-    """Validation status enum"""
-
-    PENDING = "pending"
-    CLEAN = "clean"
-    INCOMPLETE = "incomplete"
-    ERROR = "error"
+from app.models.tuition import ValidationStatus
 
 
 class AffordabilityCategory(str, Enum):
     """Affordability categories"""
 
-    VERY_AFFORDABLE = "very_affordable"
-    AFFORDABLE = "affordable"
-    MODERATE = "moderate"
-    EXPENSIVE = "expensive"
-    VERY_EXPENSIVE = "very_expensive"
-    UNKNOWN = "unknown"
+    VERY_AFFORDABLE = "VERY_AFFORDABLE"  # uppercase
+    AFFORDABLE = "AFFORDABLE"  # uppercase
+    MODERATE = "MODERATE"  # uppercase
+    EXPENSIVE = "EXPENSIVE"  # uppercase
+    VERY_EXPENSIVE = "VERY_EXPENSIVE"  # uppercase
+    UNKNOWN = "UNKNOWN"  # uppercase
 
 
 # Base schemas

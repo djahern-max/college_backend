@@ -160,8 +160,8 @@ class Institution(Base):
     # RELATIONSHIPS
     # ===========================
 
-    step2_financial_data = relationship(
-        "Step2_IC2023_AY", back_populates="institution", uselist=False
+    tuition_data = relationship(
+        "TuitionData", back_populates="institution", cascade="all, delete-orphan"
     )
 
     def __repr__(self):

@@ -2,7 +2,7 @@
 
 from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_, and_, desc
+from sqlalchemy import func, or_, and_, desc, exists
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 import logging
 from datetime import datetime
@@ -56,33 +56,53 @@ class InstitutionService:
             )
             raise Exception(f"Database error: {str(e)}")
 
+    def _build_base_query_with_tuition_filter(self):
+        """Build base query that only includes institutions with tuition data"""
+        from app.models.tuition import TuitionData
+
+        print("DEBUG: Using tuition filter - should limit to 1,018 institutions")
+
+        query = self.db.query(Institution).filter(
+            exists().where(
+                and_(
+                    TuitionData.ipeds_id == Institution.ipeds_id,
+                    TuitionData.has_tuition_data == True,
+                )
+            )
+        )
+
+        # Debug count
+        count = query.count()
+        print(f"DEBUG: Filtered query returns {count} institutions")
+
+        return query
+
     def get_institutions_with_financial_data(
         self, limit: int = 50, offset: int = 0
     ) -> List[dict]:
         """Get institutions ordered by customer_rank first, then financial data richness"""
         try:
-            from app.models.step2_ic2023_ay import Step2_IC2023_AY
+            from app.models.tuition import TuitionData  # Correct import path
 
             # Query with JOIN to get financial data
             results = (
                 self.db.query(
                     Institution,
-                    Step2_IC2023_AY.tuition_in_state,
-                    Step2_IC2023_AY.tuition_out_state,
-                    Step2_IC2023_AY.tuition_fees_in_state,
-                    Step2_IC2023_AY.room_board_on_campus,
-                    Step2_IC2023_AY.data_completeness_score,
+                    TuitionData.tuition_in_state,
+                    TuitionData.tuition_out_state,
+                    TuitionData.tuition_fees_in_state,
+                    TuitionData.room_board_on_campus,
+                    TuitionData.data_completeness_score,
                     # Calculate data richness score
-                    func.coalesce(Step2_IC2023_AY.data_completeness_score, 0).label(
+                    func.coalesce(TuitionData.data_completeness_score, 0).label(
                         "base_score"
                     ),
                 )
-                .outerjoin(
-                    Step2_IC2023_AY, Institution.ipeds_id == Step2_IC2023_AY.ipeds_id
-                )
+                .join(TuitionData, Institution.ipeds_id == TuitionData.ipeds_id)
+                .filter(TuitionData.has_tuition_data == True)
                 .order_by(
                     desc(Institution.customer_rank).nulls_last(),
-                    desc(Step2_IC2023_AY.data_completeness_score).nulls_last(),
+                    desc(TuitionData.data_completeness_score).nulls_last(),
                     desc(Institution.primary_image_quality_score).nulls_last(),
                     Institution.name,
                 )
@@ -91,10 +111,10 @@ class InstitutionService:
                 .all()
             )
 
-            # Format results
+            # Format results (rest stays the same)
             institutions_with_data = []
             for result in results:
-                institution = result[0]  # Institution object
+                institution = result[0]
                 inst_dict = {
                     "institution": institution,
                     "tuition_in_state": result[1],
@@ -242,7 +262,7 @@ class InstitutionService:
     ) -> Tuple[List[Institution], int]:
         """Search institutions with filters and pagination"""
         try:
-            query = self.db.query(Institution)
+            query = self._build_base_query_with_tuition_filter()
 
             # Apply generic search query (searches across name, city, state)
             if search_params.query:
@@ -322,7 +342,7 @@ class InstitutionService:
         """Get institutions ordered by customer ranking (for admin/advertising management)"""
         try:
             return (
-                self.db.query(Institution)
+                self._build_base_query_with_tuition_filter()
                 .order_by(
                     desc(Institution.customer_rank).nulls_last(),
                     desc(Institution.primary_image_quality_score).nulls_last(),
@@ -365,7 +385,7 @@ class InstitutionService:
         """Get institutions ordered by customer_rank first, then image quality"""
         try:
             return (
-                self.db.query(Institution)
+                self._build_base_query_with_tuition_filter()
                 .filter(Institution.primary_image_quality_score >= min_score)
                 .order_by(
                     desc(Institution.customer_rank).nulls_last(),
@@ -647,7 +667,7 @@ class InstitutionService:
         """Get featured institutions with best images and pagination support"""
         try:
             return (
-                self.db.query(Institution)
+                self._build_base_query_with_tuition_filter()  # THIS IS THE KEY CHANGE
                 .filter(
                     and_(
                         Institution.primary_image_url.isnot(None),
