@@ -13,6 +13,7 @@ from app.api.v1 import (
 from fastapi.routing import APIRoute
 from fastapi.responses import PlainTextResponse
 from app.api.v1.admin import images as admin_images
+from app.api.v1.admin import enhanced_images
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -43,6 +44,11 @@ app.include_router(
     admin_images.router, prefix="/api/v1/admin/images", tags=["admin-images"]
 )
 app.include_router(tuition.router, prefix="/api/v1/tuition", tags=["Tuition"])
+app.include_router(
+    enhanced_images.router,
+    prefix="/api/v1/admin/enhanced-images",
+    tags=["admin-enhanced-images"],
+)
 
 
 @app.get("/")

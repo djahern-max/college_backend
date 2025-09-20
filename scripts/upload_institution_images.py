@@ -68,6 +68,15 @@ def search_institutions(search_term: str):
         db.close()
 
 
+def extract_filename_from_url(url: str) -> str:
+    """Extract filename from CDN URL"""
+    if not url:
+        return ""
+    # Extract the filename from the URL
+    # Example: https://cdn.example.com/institutions/optimized/institution_123_image_optimized.jpg
+    return url.split("/")[-1]
+
+
 def upload_image_to_institution(
     institution_id: int, image_filename: str, quality_score: int = 85
 ):

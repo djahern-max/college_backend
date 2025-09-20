@@ -19,7 +19,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+print("=== LOADING INSTITUTION ROUTER ===")
 router = APIRouter()
+print("Router created successfully")
 
 
 @router.get("/featured", response_model=List[InstitutionResponse])
@@ -252,15 +254,7 @@ async def get_institution_by_id(institution_id: int, db: Session = Depends(get_d
                 "logo_image_url": institution.logo_image_url,
                 "image_extraction_status": institution.image_extraction_status,
                 "image_extraction_date": institution.image_extraction_date,
-                # Computed properties
-                "full_address": institution.full_address,
-                "display_name": institution.display_name,
-                "is_public": institution.is_public,
-                "is_private": institution.is_private,
-                "display_image_url": institution.display_image_url,
-                "has_high_quality_image": institution.has_high_quality_image,
-                "has_good_image": institution.has_good_image,
-                "image_needs_attention": institution.image_needs_attention,
+                # Note: computed properties are handled by the schema automatically
             }
 
             response = InstitutionResponse.model_validate(response_data)
@@ -283,3 +277,9 @@ async def get_institution_by_id(institution_id: int, db: Session = Depends(get_d
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get institution: {str(e)}",
         )
+
+
+print(f"=== INSTITUTION ROUTER LOADED: {len(router.routes)} routes ===")
+for route in router.routes:
+    print(f"  {list(route.methods)}: {route.path}")
+print("=== END INSTITUTION ROUTER ===")
