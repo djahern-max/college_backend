@@ -59,16 +59,31 @@ class UserService:
         self.db.refresh(db_user)
         return db_user
 
-    def authenticate(self, email: str, password: str) -> Optional[User]:
-        """Authenticate user with email and password"""
-        user = self.get_by_email(email)
-        if not user:
+    def authenticate(self, identifier: str, password: str) -> Optional[User]:
+        """
+        Authenticate user with email or username
+        Args:
+            identifier: Email address or username
+            password: User's password
+        Returns:
+            User object if authentication successful, None otherwise
+        """
+        # Try to find user by email first
+        db_user = self.db.query(User).filter(User.email == identifier).first()
+
+        # If not found by email, try username
+        if not db_user:
+            db_user = self.db.query(User).filter(User.username == identifier).first()
+
+        # If user not found at all
+        if not db_user:
             return None
-        if not user.hashed_password:
-            return None  # OAuth user without password
-        if not verify_password(password, user.hashed_password):
+
+        # Verify password
+        if not verify_password(password, db_user.hashed_password):
             return None
-        return user
+
+        return db_user
 
     def update_last_login(self, user_id: int) -> None:
         """Update user's last login timestamp"""
