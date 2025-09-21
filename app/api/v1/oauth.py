@@ -228,7 +228,19 @@ def google_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
         logger.info("JWT token created for user: %s", user.id)
 
         # 7) Redirect to frontend auth callback page with token
-        callback_url = f"{settings.FRONTEND_URL}/auth/callback?token={access_token}"
+
+        newly_created_user = (
+            not oauth_account
+            or oauth_account.created_at >= datetime.utcnow() - timedelta(minutes=5)
+        )
+
+        if newly_created_user:
+            callback_url = (
+                f"{settings.FRONTEND_URL}/callback?token={access_token}&new_user=true"
+            )
+        else:
+            callback_url = f"{settings.FRONTEND_URL}/callback?token={access_token}"
+
         logger.info("Redirecting to frontend callback: %s", callback_url.split("?")[0])
         return RedirectResponse(url=callback_url)
 
@@ -462,7 +474,19 @@ def linkedin_oauth_callback(code: str, state: str, db: Session = Depends(get_db)
         access_token = create_access_token(subject=user.id)
         logger.info("JWT token created for LinkedIn user: %s", user.id)
 
-        callback_url = f"{settings.FRONTEND_URL}/auth/callback?token={access_token}"
+        # Check if this is a newly created user
+        newly_created_user = (
+            not oauth_account
+            or oauth_account.created_at >= datetime.utcnow() - timedelta(minutes=5)
+        )
+
+        if newly_created_user:
+            callback_url = (
+                f"{settings.FRONTEND_URL}/callback?token={access_token}&new_user=true"
+            )
+        else:
+            callback_url = f"{settings.FRONTEND_URL}/callback?token={access_token}"
+
         logger.info("Redirecting to frontend callback: %s", callback_url.split("?")[0])
         return RedirectResponse(url=callback_url)
 
@@ -711,7 +735,19 @@ def tiktok_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
         access_token = create_access_token(subject=user.id)
         logger.info("JWT token created for TikTok user: %s", user.id)
 
-        callback_url = f"{settings.FRONTEND_URL}/auth/callback?token={access_token}"
+        # Check if this is a newly created user
+        newly_created_user = (
+            not oauth_account
+            or oauth_account.created_at >= datetime.utcnow() - timedelta(minutes=5)
+        )
+
+        if newly_created_user:
+            callback_url = (
+                f"{settings.FRONTEND_URL}/callback?token={access_token}&new_user=true"
+            )
+        else:
+            callback_url = f"{settings.FRONTEND_URL}/callback?token={access_token}"
+
         logger.info("Redirecting to frontend callback: %s", callback_url.split("?")[0])
         return RedirectResponse(url=callback_url)
 
