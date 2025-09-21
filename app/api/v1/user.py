@@ -1,5 +1,6 @@
+# app/api/v1/user.py - Updated with minimal changes
 from fastapi import APIRouter, Depends, HTTPException, status
-
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -34,15 +35,52 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     return UserResponse.model_validate(user)
 
 
+# UPDATED: Add OAuth2 form support for frontend compatibility
 @router.post("/login", response_model=LoginResponse)
 async def login_for_access_token(
-    login_data: LoginRequest,  # Use your custom schema instead
+    form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
-    """Login with email and password"""
+    """Login with email and password (OAuth2 form format)"""
     user_service = UserService(db)
 
-    # Now it's clear - using email
+    # OAuth2PasswordRequestForm uses 'username' field, but we accept email there
+    user = user_service.authenticate(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user"
+        )
+
+    # Update last login timestamp
+    user_service.update_last_login(user.id)
+
+    # Create access token using user ID
+    access_token = create_access_token(subject=user.id)
+
+    return LoginResponse(
+        access_token=access_token,
+        token_type="bearer",
+        expires_in=1800,
+        user=UserResponse.model_validate(user).model_dump(),
+    )
+
+
+# ADDED: Keep your original JSON login as backup
+@router.post("/login-json", response_model=LoginResponse)
+async def login_with_json(
+    login_data: LoginRequest,
+    db: Session = Depends(get_db),
+):
+    """Login with JSON format (alternative)"""
+    user_service = UserService(db)
+
     user = user_service.authenticate(login_data.email, login_data.password)
     if not user:
         raise HTTPException(
