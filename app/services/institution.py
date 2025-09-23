@@ -1,6 +1,6 @@
-# app/services/institution.py - MODIFIED for New Hampshire focus
+# app/services/institution.py - STREAMLINED CURATED SCHOOLS SERVICE
 
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, and_, desc, exists
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -23,10 +23,91 @@ logger = logging.getLogger(__name__)
 
 
 class InstitutionService:
-    """Service class for institution CRUD operations - NEW HAMPSHIRE FOCUSED"""
+    """Streamlined service for curated premium schools business model"""
+
+    # ============================================================================
+    # CURATED SCHOOLS CONFIGURATION
+    # ============================================================================
+
+    CURATED_SCHOOLS = {
+        "NH": [
+            183044,  # University of New Hampshire-Main Campus
+            182670,  # Dartmouth College
+            183026,  # Southern New Hampshire University
+            183080,  # Plymouth State University
+            183062,  # Keene State College
+            183239,  # Saint Anselm College
+            182980,  # New England College
+            182795,  # Franklin Pierce University
+            182634,  # Colby-Sawyer College
+            183071,  # University of New Hampshire at Manchester
+            182917,  # Magdalen College
+            183150,  # Great Bay Community College
+        ],
+        "MA": [
+            166027,  # Harvard University
+            166683,  # Massachusetts Institute of Technology
+            164988,  # Boston University
+            168342,  # Williams College
+            164465,  # Amherst College
+            168218,  # Wellesley College
+            168148,  # Tufts University
+            164924,  # Boston College
+            167358,  # Northeastern University
+            166629,  # University of Massachusetts-Amherst
+            165015,  # Brandeis University
+            167835,  # Smith College
+        ],
+    }
+
+    # Premium tiers for business model
+    TIER_1_SCHOOLS = [166027, 166683, 182670, 183044, 168342, 164465]  # Ultra premium
+    TIER_2_SCHOOLS = [168218, 168148, 164988, 164924, 167358, 183026]  # Premium
 
     def __init__(self, db: Session):
         self.db = db
+
+    # ============================================================================
+    # CORE QUERY BUILDER (single method replaces 3 legacy methods)
+    # ============================================================================
+
+    def _build_curated_query(self, states: List[str] = None):
+        """Build query for curated schools only"""
+        from app.models.tuition import TuitionData
+
+        # Get target schools
+        if states is None:
+            # All curated schools
+            target_ipeds = []
+            for schools in self.CURATED_SCHOOLS.values():
+                target_ipeds.extend(schools)
+        else:
+            # Specific states only
+            target_ipeds = []
+            for state in states:
+                if state.upper() in self.CURATED_SCHOOLS:
+                    target_ipeds.extend(self.CURATED_SCHOOLS[state.upper()])
+
+        if not target_ipeds:
+            return self.db.query(Institution).filter(
+                Institution.id == -1
+            )  # Empty query
+
+        return self.db.query(Institution).filter(
+            and_(
+                Institution.ipeds_id.in_(target_ipeds),
+                exists().where(
+                    and_(
+                        TuitionData.ipeds_id == Institution.ipeds_id,
+                        TuitionData.has_tuition_data == True,
+                    )
+                ),
+            )
+        )
+
+    # ============================================================================
+    # ESSENTIAL CRUD METHODS (keep these)
+    # ============================================================================
 
     def get_institution_by_id(self, institution_id: int) -> Optional[Institution]:
         """Get institution by database ID"""
@@ -56,487 +137,29 @@ class InstitutionService:
             )
             raise Exception(f"Database error: {str(e)}")
 
-    def _build_base_query_nh_with_tuition_filter(self):
-        """Build base query for NEW HAMPSHIRE institutions with tuition data"""
-        from app.models.tuition import TuitionData
-
-        print(
-            "DEBUG: Using NH + tuition filter - limiting to NH institutions with tuition data"
-        )
-
-        query = self.db.query(Institution).filter(
-            and_(
-                Institution.state == "NH",  # NEW HAMPSHIRE FILTER
-                exists().where(
-                    and_(
-                        TuitionData.ipeds_id == Institution.ipeds_id,
-                        TuitionData.has_tuition_data == True,
-                    )
-                ),
-            )
-        )
-
-        # Debug count
-        count = query.count()
-        print(f"DEBUG: NH filtered query returns {count} institutions")
-
-        return query
-
-    def _build_base_query_with_tuition_filter(self):
-        """Build base query that only includes institutions with tuition data"""
-        from app.models.tuition import TuitionData
-
-        print("DEBUG: Using tuition filter - should limit to 1,018 institutions")
-
-        query = self.db.query(Institution).filter(
-            exists().where(
-                and_(
-                    TuitionData.ipeds_id == Institution.ipeds_id,
-                    TuitionData.has_tuition_data == True,
-                )
-            )
-        )
-
-        # Debug count
-        count = query.count()
-        print(f"DEBUG: Filtered query returns {count} institutions")
-
-        return query
-
-    def get_institutions_with_financial_data(
-        self, limit: int = 50, offset: int = 0, nh_only: bool = True
-    ) -> List[dict]:
-        """Get institutions ordered by customer_rank first, then financial data richness"""
-        try:
-            from app.models.tuition import TuitionData
-
-            # Choose base query based on nh_only flag
-            base_query = self.db.query(Institution)
-            if nh_only:
-                base_query = base_query.filter(Institution.state == "NH")
-
-            # Query with JOIN to get financial data
-            results = (
-                base_query.add_columns(
-                    TuitionData.tuition_in_state,
-                    TuitionData.tuition_out_state,
-                    TuitionData.tuition_fees_in_state,
-                    TuitionData.room_board_on_campus,
-                    TuitionData.data_completeness_score,
-                    # Calculate data richness score
-                    func.coalesce(TuitionData.data_completeness_score, 0).label(
-                        "base_score"
-                    ),
-                )
-                .join(TuitionData, Institution.ipeds_id == TuitionData.ipeds_id)
-                .filter(TuitionData.has_tuition_data == True)
-                .order_by(
-                    desc(Institution.customer_rank).nulls_last(),
-                    desc(TuitionData.data_completeness_score).nulls_last(),
-                    desc(Institution.primary_image_quality_score).nulls_last(),
-                    Institution.name,
-                )
-                .offset(offset)
-                .limit(limit)
-                .all()
-            )
-
-            # Format results
-            institutions_with_data = []
-            for result in results:
-                institution = result[0]
-                inst_dict = {
-                    "institution": institution,
-                    "tuition_in_state": result[1],
-                    "tuition_out_state": result[2],
-                    "tuition_fees_in_state": result[3],
-                    "room_board_on_campus": result[4],
-                    "data_completeness_score": result[5] or 0,
-                    "has_rich_financial_data": result[5] is not None
-                    and result[5] >= 80,
-                }
-                institutions_with_data.append(inst_dict)
-
-            return institutions_with_data
-
-        except SQLAlchemyError as e:
-            logger.error(
-                f"Database error getting institutions with financial data: {str(e)}"
-            )
-            raise Exception(f"Database error: {str(e)}")
-
-    def create_institution(self, institution_data: InstitutionCreate) -> Institution:
-        """Create a new institution"""
-        try:
-            # Check if IPEDS ID already exists
-            existing = self.get_institution_by_ipeds_id(institution_data.ipeds_id)
-            if existing:
-                raise ValueError(
-                    f"Institution with IPEDS ID {institution_data.ipeds_id} already exists"
-                )
-
-            # Create new institution
-            db_institution = Institution(**institution_data.model_dump())
-
-            self.db.add(db_institution)
-            self.db.commit()
-            self.db.refresh(db_institution)
-
-            logger.info(
-                f"Successfully created institution: {db_institution.name} (ID: {db_institution.id})"
-            )
-            return db_institution
-
-        except IntegrityError as e:
-            self.db.rollback()
-            logger.error(f"Integrity error creating institution: {str(e)}")
-            raise ValueError("Institution with this IPEDS ID already exists")
-        except SQLAlchemyError as e:
-            self.db.rollback()
-            logger.error(f"Database error creating institution: {str(e)}")
-            raise Exception(f"Database error: {str(e)}")
-
-    def update_institution(
-        self, institution_id: int, update_data: InstitutionUpdate
-    ) -> Optional[Institution]:
-        """Update an existing institution"""
-        try:
-            institution = self.get_institution_by_id(institution_id)
-            if not institution:
-                return None
-
-            # Update only provided fields
-            update_dict = update_data.model_dump(exclude_unset=True)
-            for field, value in update_dict.items():
-                setattr(institution, field, value)
-
-            # If image fields are being updated, update the extraction date
-            image_fields = {
-                "primary_image_url",
-                "primary_image_quality_score",
-                "logo_image_url",
-                "image_extraction_status",
-            }
-            if any(field in update_dict for field in image_fields):
-                institution.image_extraction_date = datetime.utcnow()
-
-            self.db.commit()
-            self.db.refresh(institution)
-
-            logger.info(
-                f"Successfully updated institution: {institution.name} (ID: {institution.id})"
-            )
-            return institution
-
-        except SQLAlchemyError as e:
-            self.db.rollback()
-            logger.error(
-                f"Database error updating institution {institution_id}: {str(e)}"
-            )
-            raise Exception(f"Database error: {str(e)}")
-
-    def update_institution_images(
-        self, institution_id: int, image_data: ImageUpdateRequest
-    ) -> Optional[Institution]:
-        """Update institution image information"""
-        try:
-            institution = self.get_institution_by_id(institution_id)
-            if not institution:
-                return None
-
-            # Update image info using the model method
-            institution.update_image_info(
-                image_url=image_data.primary_image_url,
-                quality_score=image_data.primary_image_quality_score,
-                logo_url=image_data.logo_image_url,
-                status=image_data.image_extraction_status,
-            )
-
-            self.db.commit()
-            self.db.refresh(institution)
-
-            logger.info(
-                f"Successfully updated images for institution: {institution.name} (Score: {image_data.primary_image_quality_score})"
-            )
-            return institution
-
-        except SQLAlchemyError as e:
-            self.db.rollback()
-            logger.error(
-                f"Database error updating institution images {institution_id}: {str(e)}"
-            )
-            raise Exception(f"Database error: {str(e)}")
-
-    def delete_institution(self, institution_id: int) -> bool:
-        """Delete an institution"""
-        try:
-            institution = self.get_institution_by_id(institution_id)
-            if not institution:
-                return False
-
-            self.db.delete(institution)
-            self.db.commit()
-
-            logger.info(f"Successfully deleted institution ID: {institution_id}")
-            return True
-
-        except SQLAlchemyError as e:
-            self.db.rollback()
-            logger.error(
-                f"Database error deleting institution {institution_id}: {str(e)}"
-            )
-            raise Exception(f"Database error: {str(e)}")
-
-    def search_institutions(
-        self,
-        search_params: InstitutionSearch,
-        page: int = 1,
-        per_page: int = 50,
-        nh_only: bool = True,
-    ) -> Tuple[List[Institution], int]:
-        """Search institutions with filters and pagination - NH FOCUSED"""
-        try:
-            # Choose base query based on nh_only flag
-            if nh_only:
-                query = self._build_base_query_nh_with_tuition_filter()
-            else:
-                query = self._build_base_query_with_tuition_filter()
-
-            # Apply generic search query (searches across name, city, state)
-            if search_params.query:
-                search_term = f"%{search_params.query}%"
-                query = query.filter(
-                    or_(
-                        Institution.name.ilike(search_term),
-                        Institution.city.ilike(search_term),
-                        Institution.state.ilike(search_term),
-                    )
-                )
-
-            # Apply specific field filters (for advanced filtering)
-            if search_params.name:
-                query = query.filter(Institution.name.ilike(f"%{search_params.name}%"))
-
-            # Only apply state filter if not already filtered to NH
-            if search_params.state and not nh_only:
-                query = query.filter(Institution.state == search_params.state.upper())
-
-            if search_params.city:
-                query = query.filter(Institution.city.ilike(f"%{search_params.city}%"))
-
-            if search_params.region:
-                query = query.filter(Institution.region == search_params.region)
-
-            if search_params.control_type:
-                query = query.filter(
-                    Institution.control_type == search_params.control_type
-                )
-
-            if search_params.size_category:
-                query = query.filter(
-                    Institution.size_category == search_params.size_category
-                )
-
-            # Image-based filters
-            if search_params.min_image_quality is not None:
-                query = query.filter(
-                    Institution.primary_image_quality_score
-                    >= search_params.min_image_quality
-                )
-
-            if search_params.has_image is not None:
-                if search_params.has_image:
-                    query = query.filter(Institution.primary_image_url.isnot(None))
-                else:
-                    query = query.filter(Institution.primary_image_url.is_(None))
-
-            if search_params.image_status:
-                query = query.filter(
-                    Institution.image_extraction_status == search_params.image_status
-                )
-
-            # Simple ordering - just use customer rank and name
-            query = query.order_by(
-                desc(Institution.customer_rank).nulls_last(),
-                desc(Institution.primary_image_quality_score).nulls_last(),
-                Institution.name,
-            )
-
-            # Get total count before pagination
-            total = query.count()
-
-            # Apply pagination
-            offset = (page - 1) * per_page
-            institutions = query.offset(offset).limit(per_page).all()
-
-            return institutions, total
-
-        except SQLAlchemyError as e:
-            logger.error(f"Database error searching institutions: {str(e)}")
-            raise Exception(f"Database error: {str(e)}")
-
-    def get_institutions_by_customer_priority(
-        self, limit: int = 50, offset: int = 0, nh_only: bool = True
-    ) -> List[Institution]:
-        """Get institutions ordered by customer ranking (for admin/advertising management)"""
-        try:
-            if nh_only:
-                base_query = self._build_base_query_nh_with_tuition_filter()
-            else:
-                base_query = self._build_base_query_with_tuition_filter()
-
-            return (
-                base_query.order_by(
-                    desc(Institution.customer_rank).nulls_last(),
-                    desc(Institution.primary_image_quality_score).nulls_last(),
-                    Institution.name,
-                )
-                .offset(offset)
-                .limit(limit)
-                .all()
-            )
-        except SQLAlchemyError as e:
-            logger.error(f"Database error getting institutions by priority: {str(e)}")
-            raise Exception(f"Database error: {str(e)}")
-
-    def update_customer_rank(
-        self, institution_id: int, new_rank: int
-    ) -> Optional[Institution]:
-        """Update customer ranking for an institution (when they change advertising tier)"""
-        try:
-            institution = self.get_institution_by_id(institution_id)
-            if not institution:
-                return None
-
-            institution.customer_rank = new_rank
-            self.db.commit()
-            self.db.refresh(institution)
-
-            logger.info(f"Updated customer rank for {institution.name}: {new_rank}")
-            return institution
-
-        except SQLAlchemyError as e:
-            self.db.rollback()
-            logger.error(
-                f"Database error updating customer rank for institution {institution_id}: {str(e)}"
-            )
-            raise Exception(f"Database error: {str(e)}")
-
-    def get_institutions_by_image_quality(
-        self, min_score: int = 60, limit: int = 50, nh_only: bool = True
-    ) -> List[Institution]:
-        """Get institutions ordered by customer_rank first, then image quality"""
-        try:
-            if nh_only:
-                base_query = self._build_base_query_nh_with_tuition_filter()
-            else:
-                base_query = self._build_base_query_with_tuition_filter()
-
-            return (
-                base_query.filter(Institution.primary_image_quality_score >= min_score)
-                .order_by(
-                    desc(Institution.customer_rank).nulls_last(),
-                    desc(Institution.primary_image_quality_score).nulls_last(),
-                    Institution.name,
-                )
-                .limit(limit)
-                .all()
-            )
-        except SQLAlchemyError as e:
-            logger.error(
-                f"Database error getting institutions by image quality: {str(e)}"
-            )
-            raise Exception(f"Database error: {str(e)}")
-
-    def get_institutions_needing_image_review(
-        self, nh_only: bool = True
-    ) -> List[Institution]:
-        """Get institutions that need manual image review"""
-        try:
-            if nh_only:
-                # For NH only, we need to modify the Institution.get_needing_image_review method
-                # or build our own query
-                return (
-                    self.db.query(Institution)
-                    .filter(Institution.state == "NH")
-                    .filter(
-                        or_(
-                            Institution.image_extraction_status
-                            == ImageExtractionStatus.FAILED,
-                            Institution.image_extraction_status
-                            == ImageExtractionStatus.NEEDS_REVIEW,
-                            Institution.primary_image_quality_score < 40,
-                        )
-                    )
-                    .order_by(
-                        desc(Institution.customer_rank).nulls_last(), Institution.name
-                    )
-                    .all()
-                )
-            else:
-                return Institution.get_needing_image_review(self.db)
-
-        except SQLAlchemyError as e:
-            logger.error(
-                f"Database error getting institutions needing review: {str(e)}"
-            )
-            raise Exception(f"Database error: {str(e)}")
-
-    def get_institutions_by_state(self, state: str) -> List[Institution]:
-        """Get all institutions in a specific state - UPDATED to use customer_rank first"""
-        try:
-            return (
-                self.db.query(Institution)
-                .filter(Institution.state == state.upper())
-                .order_by(
-                    desc(Institution.customer_rank).nulls_last(),
-                    desc(Institution.primary_image_quality_score).nulls_last(),
-                    Institution.name,
-                )
-                .all()
-            )
-        except SQLAlchemyError as e:
-            logger.error(
-                f"Database error getting institutions for state {state}: {str(e)}"
-            )
-            raise Exception(f"Database error: {str(e)}")
-
-    def get_nh_institutions(self) -> List[Institution]:
-        """Get all New Hampshire institutions with tuition data"""
-        try:
-            return (
-                self._build_base_query_nh_with_tuition_filter()
-                .order_by(
-                    desc(Institution.customer_rank).nulls_last(),
-                    desc(Institution.primary_image_quality_score).nulls_last(),
-                    Institution.name,
-                )
-                .all()
-            )
-        except SQLAlchemyError as e:
-            logger.error(f"Database error getting NH institutions: {str(e)}")
-            raise Exception(f"Database error: {str(e)}")
+    # ============================================================================
+    # MAIN API METHODS (what your endpoints actually need)
+    # ============================================================================
 
     def get_featured_institutions(
-        self, limit: int = 20, offset: int = 0, nh_only: bool = True
+        self, limit: int = 20, offset: int = 0
     ) -> List[Institution]:
-        """Get featured institutions with best images and pagination support"""
+        """Get featured curated institutions"""
         try:
-            if nh_only:
-                base_query = self._build_base_query_nh_with_tuition_filter()
-            else:
-                base_query = self._build_base_query_with_tuition_filter()
-
             return (
-                base_query.filter(
+                self._build_curated_query()
+                .filter(
                     and_(
                         Institution.primary_image_url.isnot(None),
                         Institution.primary_image_quality_score >= 60,
                     )
                 )
                 .order_by(
+                    Institution.ipeds_id.in_(
+                        self.TIER_1_SCHOOLS
+                    ).desc(),  # Premium first
+                    Institution.state.asc(),  # NH first, then MA
                     desc(Institution.customer_rank).nulls_last(),
-                    desc(Institution.primary_image_quality_score).nulls_last(),
                     Institution.name,
                 )
                 .offset(offset)
@@ -547,46 +170,201 @@ class InstitutionService:
             logger.error(f"Database error getting featured institutions: {str(e)}")
             raise Exception(f"Database error: {str(e)}")
 
-    # ... (rest of the methods remain the same but can accept nh_only parameter where relevant)
-
-    def get_nh_stats(self) -> dict:
-        """Get New Hampshire specific institution statistics"""
+    def search_institutions(
+        self,
+        search_params: InstitutionSearch,
+        page: int = 1,
+        per_page: int = 50,
+    ) -> Tuple[List[Institution], int]:
+        """Search within curated institutions"""
         try:
-            nh_query = self.db.query(Institution).filter(Institution.state == "NH")
-            nh_with_tuition_query = self._build_base_query_nh_with_tuition_filter()
+            query = self._build_curated_query()
 
-            total_nh = nh_query.count()
-            nh_with_tuition = nh_with_tuition_query.count()
-
-            # Count by control type in NH
-            control_stats = (
-                nh_query.with_entities(
-                    Institution.control_type, func.count(Institution.id)
+            # Apply filters
+            if search_params.query:
+                search_term = f"%{search_params.query}%"
+                query = query.filter(
+                    or_(
+                        Institution.name.ilike(search_term),
+                        Institution.city.ilike(search_term),
+                        Institution.state.ilike(search_term),
+                    )
                 )
-                .group_by(Institution.control_type)
-                .all()
+
+            if search_params.state:
+                # Filter to specific state within curated list
+                query = self._build_curated_query([search_params.state])
+
+            if search_params.control_type:
+                query = query.filter(
+                    Institution.control_type == search_params.control_type
+                )
+
+            if search_params.min_image_quality is not None:
+                query = query.filter(
+                    Institution.primary_image_quality_score
+                    >= search_params.min_image_quality
+                )
+
+            # Order by premium status
+            query = query.order_by(
+                Institution.ipeds_id.in_(self.TIER_1_SCHOOLS).desc(),
+                Institution.state.asc(),
+                desc(Institution.customer_rank).nulls_last(),
+                Institution.name,
             )
 
-            # Count by size category in NH
-            size_stats = (
-                nh_query.with_entities(
-                    Institution.size_category, func.count(Institution.id)
+            total = query.count()
+            offset = (page - 1) * per_page
+            institutions = query.offset(offset).limit(per_page).all()
+
+            return institutions, total
+
+        except SQLAlchemyError as e:
+            logger.error(f"Database error searching institutions: {str(e)}")
+            raise Exception(f"Database error: {str(e)}")
+
+    # ============================================================================
+    # BUSINESS MODEL METHODS
+    # ============================================================================
+
+    def get_schools_by_state(self, state: str) -> List[Institution]:
+        """Get curated schools for specific state"""
+        return (
+            self._build_curated_query([state])
+            .order_by(
+                Institution.ipeds_id.in_(self.TIER_1_SCHOOLS).desc(),
+                desc(Institution.customer_rank).nulls_last(),
+                Institution.name,
+            )
+            .all()
+        )
+
+    def is_school_curated(self, ipeds_id: int) -> bool:
+        """Check if school is in curated list"""
+        for schools in self.CURATED_SCHOOLS.values():
+            if ipeds_id in schools:
+                return True
+        return False
+
+    def get_available_states(self) -> List[Dict]:
+        """Get states for frontend filter buttons"""
+        states = []
+        for state_code, schools in self.CURATED_SCHOOLS.items():
+            states.append(
+                {
+                    "code": state_code,
+                    "name": self._get_state_name(state_code),
+                    "school_count": len(schools),
+                    "available": True,
+                }
+            )
+
+        # Coming soon states
+        for state_code in ["CT", "VT", "RI", "ME"]:
+            states.append(
+                {
+                    "code": state_code,
+                    "name": self._get_state_name(state_code),
+                    "school_count": 0,
+                    "available": False,
+                }
+            )
+
+        return states
+
+    def _get_state_name(self, state_code: str) -> str:
+        """Convert state code to name"""
+        names = {
+            "NH": "New Hampshire",
+            "MA": "Massachusetts",
+            "CT": "Connecticut",
+            "VT": "Vermont",
+            "RI": "Rhode Island",
+            "ME": "Maine",
+        }
+        return names.get(state_code, state_code)
+
+    def get_curated_stats(self) -> Dict:
+        """Get business stats"""
+        try:
+            from app.models.tuition import TuitionData
+
+            total_curated = sum(
+                len(schools) for schools in self.CURATED_SCHOOLS.values()
+            )
+            all_ipeds = []
+            for schools in self.CURATED_SCHOOLS.values():
+                all_ipeds.extend(schools)
+
+            with_data = (
+                self.db.query(TuitionData)
+                .filter(
+                    and_(
+                        TuitionData.ipeds_id.in_(all_ipeds),
+                        TuitionData.has_tuition_data == True,
+                    )
                 )
-                .group_by(Institution.size_category)
-                .all()
+                .count()
             )
 
             return {
-                "state": "New Hampshire",
-                "total_institutions": total_nh,
-                "institutions_with_tuition_data": nh_with_tuition,
-                "tuition_data_coverage": (
-                    f"{(nh_with_tuition/total_nh)*100:.1f}%" if total_nh > 0 else "0%"
+                "total_curated_schools": total_curated,
+                "schools_with_data": with_data,
+                "completion_rate": (
+                    f"{(with_data/total_curated*100):.1f}%"
+                    if total_curated > 0
+                    else "0%"
                 ),
-                "by_control_type": {str(ct): count for ct, count in control_stats},
-                "by_size_category": {str(sc): count for sc, count in size_stats if sc},
+                "tier_1_count": len(self.TIER_1_SCHOOLS),
+                "tier_2_count": len(self.TIER_2_SCHOOLS),
+                "states": list(self.CURATED_SCHOOLS.keys()),
             }
 
         except SQLAlchemyError as e:
-            logger.error(f"Database error getting NH institution stats: {str(e)}")
+            logger.error(f"Database error getting stats: {str(e)}")
             raise Exception(f"Database error: {str(e)}")
+
+    # ============================================================================
+    # ADMIN/CUSTOMER MANAGEMENT (only if you need these)
+    # ============================================================================
+
+    def update_customer_rank(
+        self, institution_id: int, new_rank: int
+    ) -> Optional[Institution]:
+        """Update customer ranking"""
+        try:
+            institution = self.get_institution_by_id(institution_id)
+            if not institution:
+                return None
+
+            institution.customer_rank = new_rank
+            self.db.commit()
+            self.db.refresh(institution)
+            return institution
+
+        except SQLAlchemyError as e:
+            self.db.rollback()
+            logger.error(f"Database error updating customer rank: {str(e)}")
+            raise Exception(f"Database error: {str(e)}")
+
+    # ============================================================================
+    # LEGACY COMPATIBILITY (temporary - for existing API endpoints)
+    # ============================================================================
+
+    def get_institutions_by_customer_priority(
+        self, limit: int = 50, offset: int = 0, priority_states_only: bool = True
+    ) -> List[Institution]:
+        """Legacy method - maps to curated query"""
+        return (
+            self._build_curated_query()
+            .order_by(
+                Institution.ipeds_id.in_(self.TIER_1_SCHOOLS).desc(),
+                Institution.state.asc(),
+                desc(Institution.customer_rank).nulls_last(),
+                Institution.name,
+            )
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )

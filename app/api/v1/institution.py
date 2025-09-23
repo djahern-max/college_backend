@@ -48,18 +48,24 @@ async def search_institutions(
     query: str = Query(..., min_length=1),
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
+    state: Optional[str] = Query(None, description="Filter by state code"),
     db: Session = Depends(get_db),
 ):
-    """Search institutions by name, city, or state with pagination"""
+    """Search institutions by name, city, or state with optional state filtering"""
     try:
         service = InstitutionService(db)
 
-        # FIXED: Create search params that actually search across name, city, state
-        # We'll search the query against all these fields
-        search_params = InstitutionSearch(
-            query=query  # Pass the raw query to be handled by the service
+        # Create search params with both query and state
+        search_params = InstitutionSearch(query=query, state=state)
+
+        # Determine priority states behavior
+        priority_states_only = True
+        if state and state.upper() not in ["NH", "MA"]:
+            priority_states_only = False
+
+        institutions, total = service.search_institutions(
+            search_params, page, per_page, priority_states_only=priority_states_only
         )
-        institutions, total = service.search_institutions(search_params, page, per_page)
 
         return InstitutionList(
             institutions=institutions,
@@ -101,14 +107,30 @@ async def list_institutions(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
     min_image_quality: Optional[int] = Query(None, ge=0, le=100),
+    state: Optional[str] = Query(
+        None, description="Filter by state code (e.g., 'NH', 'MA')"
+    ),
     db: Session = Depends(get_db),
 ):
-    """Get institutions ordered by image quality (best first)"""
+    """Get institutions with optional state filtering"""
     try:
         service = InstitutionService(db)
 
-        search_params = InstitutionSearch(min_image_quality=min_image_quality)
-        institutions, total = service.search_institutions(search_params, page, per_page)
+        # Create search params with state filter
+        search_params = InstitutionSearch(
+            min_image_quality=min_image_quality,
+            state=state,  # Add state parameter to search
+        )
+
+        # Determine if we should use priority states only
+        priority_states_only = True
+        if state and state.upper() not in ["NH", "MA"]:
+            # If filtering by a state we don't fully support yet, use broader search
+            priority_states_only = False
+
+        institutions, total = service.search_institutions(
+            search_params, page, per_page, priority_states_only=priority_states_only
+        )
 
         return InstitutionList(
             institutions=institutions,
@@ -283,3 +305,120 @@ print(f"=== INSTITUTION ROUTER LOADED: {len(router.routes)} routes ===")
 for route in router.routes:
     print(f"  {list(route.methods)}: {route.path}")
 print("=== END INSTITUTION ROUTER ===")
+
+
+# Add this to your app/api/v1/institution.py file
+
+
+@router.get("/", response_model=InstitutionList)
+async def list_institutions(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=100),
+    min_image_quality: Optional[int] = Query(None, ge=0, le=100),
+    state: Optional[str] = Query(
+        None, description="Filter by state code (e.g., 'NH', 'MA')"
+    ),
+    db: Session = Depends(get_db),
+):
+    """Get institutions with optional state filtering"""
+    try:
+        service = InstitutionService(db)
+
+        # Create search params with state filter
+        search_params = InstitutionSearch(
+            min_image_quality=min_image_quality,
+            state=state,  # Add state parameter to search
+        )
+
+        # Determine if we should use priority states only
+        priority_states_only = True
+        if state and state.upper() not in ["NH", "MA"]:
+            # If filtering by a state we don't fully support yet, use broader search
+            priority_states_only = False
+
+        institutions, total = service.search_institutions(
+            search_params, page, per_page, priority_states_only=priority_states_only
+        )
+
+        return InstitutionList(
+            institutions=institutions,
+            total=total,
+            page=page,
+            per_page=per_page,
+            total_pages=(total + per_page - 1) // per_page,
+        )
+    except Exception as e:
+        logger.error(f"Error listing institutions: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list institutions: {str(e)}",
+        )
+
+
+@router.get("/search", response_model=InstitutionList)
+async def search_institutions(
+    query: str = Query(..., min_length=1),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=100),
+    state: Optional[str] = Query(None, description="Filter by state code"),
+    db: Session = Depends(get_db),
+):
+    """Search institutions by name, city, or state with optional state filtering"""
+    try:
+        service = InstitutionService(db)
+
+        # Create search params with both query and state
+        search_params = InstitutionSearch(query=query, state=state)
+
+        # Determine priority states behavior
+        priority_states_only = True
+        if state and state.upper() not in ["NH", "MA"]:
+            priority_states_only = False
+
+        institutions, total = service.search_institutions(
+            search_params, page, per_page, priority_states_only=priority_states_only
+        )
+
+        return InstitutionList(
+            institutions=institutions,
+            total=total,
+            page=page,
+            per_page=per_page,
+            total_pages=(total + per_page - 1) // per_page,
+        )
+    except Exception as e:
+        logger.error(f"Error searching institutions: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to search institutions: {str(e)}",
+        )
+
+
+# Optional: Add an endpoint to get available states
+@router.get("/states")
+async def get_available_states(db: Session = Depends(get_db)):
+    """Get list of states with available institutions"""
+    try:
+        service = InstitutionService(db)
+
+        # Get stats to show which states have data
+        stats = service.get_priority_states_stats()
+
+        available_states = [
+            {"code": "NH", "name": "New Hampshire", "available": True},
+            {"code": "MA", "name": "Massachusetts", "available": True},
+            # Add more as you expand
+            {"code": "CT", "name": "Connecticut", "available": False},
+            {"code": "VT", "name": "Vermont", "available": False},
+            {"code": "ME", "name": "Maine", "available": False},
+            {"code": "RI", "name": "Rhode Island", "available": False},
+        ]
+
+        return {"states": available_states, "stats": stats}
+
+    except Exception as e:
+        logger.error(f"Error getting available states: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get available states: {str(e)}",
+        )
