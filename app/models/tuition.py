@@ -20,6 +20,7 @@ from app.core.database import Base
 from enum import Enum as PyEnum
 from typing import Optional, Dict, Any
 from datetime import datetime
+from sqlalchemy.dialects.postgresql import JSONB
 
 
 class ValidationStatus(PyEnum):
@@ -99,6 +100,13 @@ class TuitionData(Base):
     room_board_off_campus = Column(
         Float, nullable=True, comment="Room and board costs off campus"
     )
+
+    room_board_breakdown = Column(
+        JSONB,
+        nullable=True,
+        comment='JSON breakdown of room/board costs: {"housing": 9346, "meals": 5358, "total": 14704}',
+    )
+
     books_supplies = Column(Float, nullable=True, comment="Books and supplies cost")
     personal_expenses = Column(
         Float, nullable=True, comment="Personal/miscellaneous expenses"
@@ -186,6 +194,44 @@ class TuitionData(Base):
         result.update(self._get_calculated_fields())
         return result
 
+    def get_room_board_info(self) -> Dict[str, Any]:
+        """Get room and board information with breakdown if available"""
+        if not self.room_board_on_campus:
+            return {
+                "total": 0,
+                "has_breakdown": False,
+                "breakdown": None,
+                "housing": None,
+                "meals": None,
+            }
+
+        breakdown = self.room_board_breakdown or {}
+        housing = breakdown.get("housing")
+        meals = breakdown.get("meals")
+
+        return {
+            "total": self.room_board_on_campus,
+            "has_breakdown": housing is not None and meals is not None,
+            "breakdown": breakdown,
+            "housing": housing,
+            "meals": meals,
+        }
+
+    def update_room_board_breakdown(
+        self, housing: Optional[float] = None, meals: Optional[float] = None
+    ):
+        """Update room and board breakdown"""
+        if housing is not None or meals is not None:
+            breakdown = self.room_board_breakdown or {}
+            if housing is not None:
+                breakdown["housing"] = housing
+            if meals is not None:
+                breakdown["meals"] = meals
+            if housing is not None and meals is not None:
+                breakdown["total"] = housing + meals
+                self.room_board_on_campus = breakdown["total"]
+            self.room_board_breakdown = breakdown
+
     def _get_calculated_fields(self) -> Dict[str, Any]:
         """Calculate derived fields for API responses"""
         # Calculate total costs
@@ -238,6 +284,7 @@ class TuitionData(Base):
             "total_cost_out_state": total_cost_out_state,
             "affordability_category": affordability_category,
             "has_comprehensive_data": has_comprehensive_data,
+            "room_board_info": self.get_room_board_info(),  # ADD THIS LINE
             "cost_breakdown": {
                 "tuition_in_state": self.tuition_in_state,
                 "tuition_out_state": self.tuition_out_state,
