@@ -66,7 +66,7 @@ class ProfileService:
                 act_score=profile_data.act_score,
                 academic_interests=profile_data.academic_interests,
                 has_personal_statement=profile_data.has_essays,
-                profile_tier=ProfileTier.BASIC,  # Use the enum directly
+                profile_tier="basic",
             )
 
             # Calculate completion status
