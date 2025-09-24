@@ -27,7 +27,7 @@ CURATED_MA_SCHOOLS = {
     168148: "Tufts_University.jpeg",  # Tufts University
     164924: "Boston_College.jpeg",  # Boston College
     167358: "Northeastern.webp",  # Northeastern University
-    166629: "UMASS_Amherst.avif",  # University of Massachusetts-Amherst
+    166629: "UMASS_amherst.jpg",  # University of Massachusetts-Amherst
     165015: "BrandeisUniversity.jpg",  # Brandeis University
     167835: "SmithCollege.webp",  # Smith College
 }
