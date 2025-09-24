@@ -18,6 +18,7 @@ from app.core.database import Base
 from enum import Enum
 import logging
 from typing import Optional, Dict, Any, List
+from sqlalchemy import CheckConstraint
 
 logger = logging.getLogger(__name__)
 
@@ -198,7 +199,9 @@ class UserProfile(Base):
     # =========================
     # PROFILE TRACKING
     # =========================
-    profile_tier = Column(SQLEnum(ProfileTier), default="basic", nullable=False)
+    profile_tier = Column(
+        String(20), default="basic", nullable=False, server_default="basic"
+    )
     profile_completed = Column(Boolean, default=False, nullable=False)
     completion_percentage = Column(Integer, default=0, nullable=False)
     last_matching_update = Column(DateTime(timezone=True), nullable=True)
@@ -211,6 +214,13 @@ class UserProfile(Base):
     )
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "profile_tier IN ('basic', 'enhanced', 'complete', 'optimized')",
+            name="valid_profile_tier",
+        ),
+    )
 
     # =========================
     # RELATIONSHIPS
