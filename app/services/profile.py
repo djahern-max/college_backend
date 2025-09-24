@@ -53,7 +53,7 @@ class ProfileService:
             if existing_profile:
                 raise ValueError("Profile already exists for this user")
 
-            # Create basic profile
+            # Create basic profile - EXPLICIT field mapping
             db_profile = UserProfile(
                 user_id=user_id,
                 high_school_name=profile_data.high_school_name,
@@ -66,13 +66,12 @@ class ProfileService:
                 act_score=profile_data.act_score,
                 academic_interests=profile_data.academic_interests,
                 has_personal_statement=profile_data.has_essays,
-                profile_tier=ProfileTier.BASIC,
+                profile_tier=ProfileTier.BASIC,  # Use the enum directly
             )
 
             # Calculate completion status
             db_profile.update_completion_status()
 
-            # Save to database
             self.db.add(db_profile)
             self.db.commit()
             self.db.refresh(db_profile)
@@ -92,6 +91,18 @@ class ProfileService:
             self.db.rollback()
             logger.error(f"Error creating basic profile for user {user_id}: {str(e)}")
             raise
+
+    # DEBUG: Add this method to your ProfileService to test enum values
+    def debug_enum_values(self):
+        """Debug method to check enum values"""
+        print(f"ProfileTier.BASIC = {ProfileTier.BASIC}")
+        print(f"ProfileTier.BASIC.value = {ProfileTier.BASIC.value}")
+        print(f"str(ProfileTier.BASIC) = {str(ProfileTier.BASIC)}")
+        return {
+            "enum_name": ProfileTier.BASIC.name,
+            "enum_value": ProfileTier.BASIC.value,
+            "str_representation": str(ProfileTier.BASIC),
+        }
 
     def add_activities(
         self, user_id: int, activities_data: ActivityUpdate
