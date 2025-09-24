@@ -239,7 +239,7 @@ class UserProfile(Base):
             basic_percentage = (basic_completed / len(basic_fields)) * 100
 
             # If still in basic tier, just return basic percentage
-            if self.profile_tier == ProfileTier.BASIC:
+            if self.profile_tier == "basic":
                 return int(basic_percentage)
 
             # Enhanced tier adds activities and demographics
@@ -256,7 +256,7 @@ class UserProfile(Base):
             )
             enhanced_percentage = (enhanced_completed / len(enhanced_fields)) * 100
 
-            if self.profile_tier == ProfileTier.ENHANCED:
+            if self.profile_tier == "enhanced":
                 return int((basic_percentage * 0.7) + (enhanced_percentage * 0.3))
 
             # Complete tier adds preferences and essays
@@ -351,7 +351,7 @@ class UserProfile(Base):
 
             # Mark as completed based on tier and percentage
             tier_completion_thresholds = {
-                "basic": 80,  # Use string keys
+                "basic": 80,
                 "enhanced": 70,
                 "complete": 75,
                 "optimized": 80,
