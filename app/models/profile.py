@@ -198,9 +198,7 @@ class UserProfile(Base):
     # =========================
     # PROFILE TRACKING
     # =========================
-    profile_tier = Column(
-        SQLEnum(ProfileTier), default=ProfileTier.BASIC, nullable=False
-    )
+    profile_tier = Column(SQLEnum(ProfileTier), default="basic", nullable=False)
     profile_completed = Column(Boolean, default=False, nullable=False)
     completion_percentage = Column(Integer, default=0, nullable=False)
     last_matching_update = Column(DateTime(timezone=True), nullable=True)
