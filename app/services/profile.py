@@ -1,4 +1,4 @@
-# app/services/profile.py - UPDATED VERSION
+# app/services/profile.py - COMPLETELY REBUILT AND FIXED
 from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
@@ -53,7 +53,7 @@ class ProfileService:
             if existing_profile:
                 raise ValueError("Profile already exists for this user")
 
-            # Create basic profile - EXPLICIT field mapping
+            # Create basic profile - EXPLICIT field mapping with FIXED ENUM HANDLING
             db_profile = UserProfile(
                 user_id=user_id,
                 high_school_name=profile_data.high_school_name,
@@ -66,7 +66,7 @@ class ProfileService:
                 act_score=profile_data.act_score,
                 academic_interests=profile_data.academic_interests,
                 has_personal_statement=profile_data.has_essays,
-                # CRITICAL FIX: Use string literal, not enum
+                # FIXED: Use string literal instead of enum
                 profile_tier="basic",
                 profile_completed=False,
                 completion_percentage=0,
@@ -102,12 +102,25 @@ class ProfileService:
         try:
             profile = self._get_existing_profile(user_id)
 
-            # Update activities...
-            # (your existing activity update code)
+            # Update activities
+            if activities_data.extracurricular_activities:
+                profile.extracurricular_activities = (
+                    activities_data.extracurricular_activities
+                )
+            if activities_data.volunteer_experience:
+                profile.volunteer_experience = activities_data.volunteer_experience
+            if activities_data.volunteer_hours is not None:
+                profile.volunteer_hours = activities_data.volunteer_hours
+            if activities_data.leadership_positions:
+                profile.leadership_positions = activities_data.leadership_positions
+            if activities_data.sports_activities:
+                profile.sports_activities = activities_data.sports_activities
+            if activities_data.arts_activities:
+                profile.arts_activities = activities_data.arts_activities
 
-            # CRITICAL FIX: Use string literal, not enum
-            if profile.profile_tier == "basic":  # Compare with string
-                profile.profile_tier = "enhanced"  # Assign string
+            # FIXED: Use string comparison and assignment
+            if profile.profile_tier == "basic":
+                profile.profile_tier = "enhanced"
 
             profile.update_completion_status()
             self.db.commit()
@@ -138,8 +151,9 @@ class ProfileService:
                     demographics_data.first_generation_college
                 )
             if demographics_data.household_income_range:
+                # FIXED: Use .value for enum fields
                 profile.household_income_range = (
-                    demographics_data.household_income_range
+                    demographics_data.household_income_range.value
                 )
             if demographics_data.family_size:
                 profile.family_size = demographics_data.family_size
@@ -152,9 +166,9 @@ class ProfileService:
             if demographics_data.rural_background is not None:
                 profile.rural_background = demographics_data.rural_background
 
-            # Advance tier if appropriate
-            if profile.profile_tier == ProfileTier.BASIC:
-                profile.profile_tier = ProfileTier.ENHANCED
+            # FIXED: Use string comparison and assignment
+            if profile.profile_tier == "basic":
+                profile.profile_tier = "enhanced"
 
             profile.update_completion_status()
             self.db.commit()
@@ -253,7 +267,10 @@ class ProfileService:
             profile = self._get_existing_profile(user_id)
 
             if preferences_data.preferred_college_size:
-                profile.preferred_college_size = preferences_data.preferred_college_size
+                # FIXED: Use .value for enum fields
+                profile.preferred_college_size = (
+                    preferences_data.preferred_college_size.value
+                )
             if preferences_data.preferred_states:
                 profile.preferred_states = preferences_data.preferred_states
             if preferences_data.max_tuition_budget:
@@ -273,9 +290,9 @@ class ProfileService:
             if preferences_data.study_abroad_interest is not None:
                 profile.study_abroad_interest = preferences_data.study_abroad_interest
 
-            # Advance to complete tier
-            if profile.profile_tier in [ProfileTier.BASIC, ProfileTier.ENHANCED]:
-                profile.profile_tier = ProfileTier.COMPLETE
+            # FIXED: Use string comparison and assignment
+            if profile.profile_tier in ["basic", "enhanced"]:
+                profile.profile_tier = "complete"
 
             profile.update_completion_status()
             self.db.commit()
@@ -302,7 +319,7 @@ class ProfileService:
         if not profile:
             return {
                 "completion_percentage": 0,
-                "tier": ProfileTier.BASIC,
+                "tier": "basic",  # FIXED: Return string instead of enum
                 "missing_basic_fields": [
                     "high_school_name",
                     "graduation_year",
@@ -327,7 +344,7 @@ class ProfileService:
 
         return {
             "completion_percentage": profile.completion_percentage,
-            "tier": profile.profile_tier,
+            "tier": profile.profile_tier,  # This is already a string from the database
             "missing_basic_fields": missing_basic,
             "next_steps": next_steps,
             "can_advance": profile.can_advance_to_enhanced(),
@@ -386,7 +403,7 @@ class ProfileService:
         return steps[:3]  # Return top 3 recommendations
 
     # =========================
-    # TRADITIONAL CRUD METHODS
+    # TRADITIONAL CRUD METHODS - COMPLETELY FIXED
     # =========================
 
     def create_profile(self, user_id: int, profile_data: ProfileCreate) -> UserProfile:
@@ -400,11 +417,26 @@ class ProfileService:
             # Create profile with comprehensive data
             profile_dict = profile_data.model_dump(exclude_unset=True)
 
-            # CRITICAL FIX: Ensure profile_tier is set to the correct enum value
-            profile_dict["profile_tier"] = (
-                ProfileTier.BASIC
-            )  # This should use the enum, not the string
+            # CRITICAL FIX: Set profile_tier as string, not enum
+            profile_dict["profile_tier"] = "basic"  # Always start as basic
             profile_dict["user_id"] = user_id
+
+            # CRITICAL FIX: Handle enum fields in profile_dict
+            if (
+                "household_income_range" in profile_dict
+                and profile_dict["household_income_range"]
+            ):
+                profile_dict["household_income_range"] = profile_dict[
+                    "household_income_range"
+                ].value
+
+            if (
+                "preferred_college_size" in profile_dict
+                and profile_dict["preferred_college_size"]
+            ):
+                profile_dict["preferred_college_size"] = profile_dict[
+                    "preferred_college_size"
+                ].value
 
             db_profile = UserProfile(**profile_dict)
 
@@ -436,10 +468,26 @@ class ProfileService:
         try:
             profile = self._get_existing_profile(user_id)
 
-            # Update fields with new data
+            # Update fields with new data - FIXED enum handling
             update_dict = profile_data.model_dump(exclude_unset=True)
+
             for field, value in update_dict.items():
-                setattr(profile, field, value)
+                if field == "household_income_range" and value:
+                    # Handle enum conversion
+                    setattr(
+                        profile,
+                        field,
+                        value.value if hasattr(value, "value") else value,
+                    )
+                elif field == "preferred_college_size" and value:
+                    # Handle enum conversion
+                    setattr(
+                        profile,
+                        field,
+                        value.value if hasattr(value, "value") else value,
+                    )
+                else:
+                    setattr(profile, field, value)
 
             profile.update_completion_status()
             self.db.commit()
