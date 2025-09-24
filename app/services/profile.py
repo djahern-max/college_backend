@@ -401,10 +401,25 @@ class ProfileService:
     # =========================
 
     def create_profile(self, user_id: int, profile_data: ProfileCreate) -> UserProfile:
-        """CREATE - Traditional comprehensive profile creation"""
+        """CREATE - Create a comprehensive profile from ProfileCreate data"""
         try:
+            # Check if profile already exists
+            existing_profile = self.get_profile_by_user_id(user_id)
+            if existing_profile:
+                raise ValueError("Profile already exists for this user")
+
+            # Create profile with comprehensive data
             profile_dict = profile_data.model_dump(exclude_unset=True)
-            db_profile = UserProfile(user_id=user_id, **profile_dict)
+
+            # CRITICAL FIX: Ensure profile_tier is set to the correct enum value
+            profile_dict["profile_tier"] = (
+                ProfileTier.BASIC
+            )  # This should use the enum, not the string
+            profile_dict["user_id"] = user_id
+
+            db_profile = UserProfile(**profile_dict)
+
+            # Calculate completion status
             db_profile.update_completion_status()
 
             self.db.add(db_profile)
