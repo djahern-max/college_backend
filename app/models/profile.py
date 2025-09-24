@@ -338,9 +338,9 @@ class UserProfile(Base):
         try:
             self.completion_percentage = self.calculate_completion_percentage()
 
-            # Auto-advance tiers based on content
+            # Auto-advance tiers based on content - FIX: Use string comparisons
             if (
-                self.profile_tier == ProfileTier.BASIC
+                self.profile_tier == "basic"  # Use string, not enum
                 and self.can_advance_to_enhanced()
             ):
                 if (
@@ -349,14 +349,14 @@ class UserProfile(Base):
                     or self.ethnicity is not None
                     or self.first_generation_college is not None
                 ):
-                    self.profile_tier = ProfileTier.ENHANCED
+                    self.profile_tier = "enhanced"  # Assign string, not enum
 
             # Mark as completed based on tier and percentage
             tier_completion_thresholds = {
-                ProfileTier.BASIC: 80,
-                ProfileTier.ENHANCED: 70,
-                ProfileTier.COMPLETE: 75,
-                ProfileTier.OPTIMIZED: 80,
+                "basic": 80,  # Use string keys
+                "enhanced": 70,
+                "complete": 75,
+                "optimized": 80,
             }
 
             threshold = tier_completion_thresholds.get(self.profile_tier, 80)

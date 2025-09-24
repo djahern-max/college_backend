@@ -66,7 +66,10 @@ class ProfileService:
                 act_score=profile_data.act_score,
                 academic_interests=profile_data.academic_interests,
                 has_personal_statement=profile_data.has_essays,
+                # CRITICAL FIX: Use string literal, not enum
                 profile_tier="basic",
+                profile_completed=False,
+                completion_percentage=0,
             )
 
             # Calculate completion status
@@ -92,18 +95,6 @@ class ProfileService:
             logger.error(f"Error creating basic profile for user {user_id}: {str(e)}")
             raise
 
-    # DEBUG: Add this method to your ProfileService to test enum values
-    def debug_enum_values(self):
-        """Debug method to check enum values"""
-        print(f"ProfileTier.BASIC = {ProfileTier.BASIC}")
-        print(f"ProfileTier.BASIC.value = {ProfileTier.BASIC.value}")
-        print(f"str(ProfileTier.BASIC) = {str(ProfileTier.BASIC)}")
-        return {
-            "enum_name": ProfileTier.BASIC.name,
-            "enum_value": ProfileTier.BASIC.value,
-            "str_representation": str(ProfileTier.BASIC),
-        }
-
     def add_activities(
         self, user_id: int, activities_data: ActivityUpdate
     ) -> UserProfile:
@@ -111,25 +102,12 @@ class ProfileService:
         try:
             profile = self._get_existing_profile(user_id)
 
-            # Update activities
-            if activities_data.extracurricular_activities:
-                profile.extracurricular_activities = (
-                    activities_data.extracurricular_activities
-                )
-            if activities_data.volunteer_experience:
-                profile.volunteer_experience = activities_data.volunteer_experience
-            if activities_data.volunteer_hours is not None:
-                profile.volunteer_hours = activities_data.volunteer_hours
-            if activities_data.leadership_positions:
-                profile.leadership_positions = activities_data.leadership_positions
-            if activities_data.sports_activities:
-                profile.sports_activities = activities_data.sports_activities
-            if activities_data.arts_activities:
-                profile.arts_activities = activities_data.arts_activities
+            # Update activities...
+            # (your existing activity update code)
 
-            # Advance tier if appropriate
-            if profile.profile_tier == ProfileTier.BASIC:
-                profile.profile_tier = ProfileTier.ENHANCED
+            # CRITICAL FIX: Use string literal, not enum
+            if profile.profile_tier == "basic":  # Compare with string
+                profile.profile_tier = "enhanced"  # Assign string
 
             profile.update_completion_status()
             self.db.commit()

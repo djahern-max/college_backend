@@ -207,7 +207,7 @@ def upgrade() -> None:
                 WHERE preferred_college_size_temp IS NOT NULL;
                 
                 ALTER TABLE user_profiles DROP COLUMN preferred_college_size_temp;
-            END IF;
+            END IF;def create_basic_profile
         END $$;
     """
     )
