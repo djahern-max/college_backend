@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings
 from typing import List
 import os
 from dotenv import load_dotenv
+from pydantic import validator
 
 load_dotenv()
 
@@ -84,6 +85,18 @@ class Settings(BaseSettings):
     TIKTOK_CLIENT_ID: str = ""
     TIKTOK_CLIENT_SECRET: str = ""
     TIKTOK_CLIENT_KEY: str = ""
+
+    @validator("GOOGLE_CLIENT_ID")
+    def validate_google_config(cls, v):
+        if cls.ENVIRONMENT == "production" and not v:
+            raise ValueError("GOOGLE_CLIENT_ID is required in production")
+        return v
+
+    @validator("LINKEDIN_CLIENT_ID")
+    def validate_linkedin_config(cls, v):
+        if cls.ENVIRONMENT == "production" and not v:
+            raise ValueError("LINKEDIN_CLIENT_ID is required in production")
+        return v
 
     # OAuth Redirect URIs - Dynamic based on environment
     @property

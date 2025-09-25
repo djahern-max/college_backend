@@ -759,3 +759,12 @@ def tiktok_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
         logger.exception("TikTok OAuth callback failed: %s", str(e))
         error_url = f"{settings.FRONTEND_URL}/auth/error?message=oauth_failed"
         return RedirectResponse(url=error_url)
+
+
+@router.delete("/cleanup-expired-states")
+async def cleanup_expired_states(db: Session = Depends(get_db)):
+    expired_states = (
+        db.query(OAuthState).filter(OAuthState.expires_at < datetime.utcnow()).delete()
+    )
+    db.commit()
+    return {"deleted": expired_states}
