@@ -87,15 +87,24 @@ class Settings(BaseSettings):
     TIKTOK_CLIENT_KEY: str = ""
 
     @validator("GOOGLE_CLIENT_ID")
-    def validate_google_config(cls, v):
-        if cls.ENVIRONMENT == "production" and not v:
+    def validate_google_config(cls, v, values):
+        environment = values.get("ENVIRONMENT", "development")
+        if environment == "production" and not v:
             raise ValueError("GOOGLE_CLIENT_ID is required in production")
         return v
 
     @validator("LINKEDIN_CLIENT_ID")
-    def validate_linkedin_config(cls, v):
-        if cls.ENVIRONMENT == "production" and not v:
+    def validate_linkedin_config(cls, v, values):
+        environment = values.get("ENVIRONMENT", "development")
+        if environment == "production" and not v:
             raise ValueError("LINKEDIN_CLIENT_ID is required in production")
+        return v
+
+    @validator("TIKTOK_CLIENT_ID")
+    def validate_tiktok_config(cls, v, values):
+        environment = values.get("ENVIRONMENT", "development")
+        if environment == "production" and not v:
+            raise ValueError("TIKTOK_CLIENT_ID is required in production")
         return v
 
     # OAuth Redirect URIs - Dynamic based on environment
