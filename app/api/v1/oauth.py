@@ -232,7 +232,7 @@ def google_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
         newly_created_user = (
             not oauth_account
             or oauth_account.created_at
-            >= datetime.now(datetime.timezone.utc) - timedelta(minutes=5)
+            >= datetime.utcnow() - timedelta(minutes=5)  # Both timezone-naive now
         )
 
         if newly_created_user:
@@ -479,7 +479,7 @@ def linkedin_oauth_callback(code: str, state: str, db: Session = Depends(get_db)
         newly_created_user = (
             not oauth_account
             or oauth_account.created_at
-            >= datetime.now(datetime.timezone.utc) - timedelta(minutes=5)
+            >= datetime.utcnow() - timedelta(minutes=5)  # Both timezone-naive now
         )
 
         if newly_created_user:
@@ -741,7 +741,7 @@ def tiktok_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
         newly_created_user = (
             not oauth_account
             or oauth_account.created_at
-            >= datetime.now(datetime.timezone.utc) - timedelta(minutes=5)
+            >= datetime.utcnow() - timedelta(minutes=5)  # Both timezone-naive now
         )
 
         if newly_created_user:
