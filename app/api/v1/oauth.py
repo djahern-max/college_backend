@@ -34,8 +34,8 @@ def get_google_oauth_url(db: Session = Depends(get_db)):
         oauth_state = OAuthState(
             state=state,
             provider="google",
-            created_at=datetime.utcnow(),
-            expires_at=datetime.utcnow() + timedelta(minutes=10),
+            created_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
         )
         db.add(oauth_state)
         db.commit()
@@ -81,8 +81,8 @@ def google_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
             .filter(
                 OAuthState.state == state,
                 OAuthState.provider == "google",
-                OAuthState.used.is_not(True),  # Allow both NULL and False values
-                OAuthState.expires_at > datetime.utcnow(),
+                OAuthState.used.is_not(True),
+                OAuthState.expires_at > datetime.now(timezone.utc),
             )
             .first()
         )
@@ -97,7 +97,7 @@ def google_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
                     "State details - provider: %s, used: %s, expired: %s",
                     s.provider,
                     s.used,
-                    s.expires_at < datetime.utcnow(),
+                    s.expires_at < datetime.now(timezone.utc),
                 )
 
             error_url = f"{settings.FRONTEND_URL}/auth/error?message=invalid_state"
@@ -147,7 +147,6 @@ def google_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
         )
 
         # 5) Find or create user account
-        # Check if OAuth account exists
         oauth_account = (
             db.query(OAuthAccount)
             .filter(
@@ -165,7 +164,7 @@ def google_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
             oauth_account.access_token = tokens["access_token"]
             oauth_account.refresh_token = tokens.get("refresh_token")
             oauth_account.profile_data = user_data
-            oauth_account.updated_at = datetime.utcnow()
+            oauth_account.updated_at = datetime.now(timezone.utc)
             user = oauth_account.user
         else:
             # Check if user exists by email
@@ -178,14 +177,11 @@ def google_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
 
                 # Generate a unique username based on email
                 base_username = user_data["email"].split("@")[0]
-                # Replace invalid characters with underscores
                 base_username = "".join(
                     c if c.isalnum() or c in "_-" else "_" for c in base_username
                 )
-                # Ensure username starts with letter or number
                 if base_username and not base_username[0].isalnum():
                     base_username = "user_" + base_username
-                # Fallback if username becomes empty
                 if not base_username:
                     base_username = "oauth_user"
 
@@ -200,7 +196,7 @@ def google_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
                     username=username,
                     first_name=user_data.get("given_name", ""),
                     last_name=user_data.get("family_name", ""),
-                    password="oauth_user_no_password",  # OAuth users don't need passwords
+                    password="oauth_user_no_password",
                 )
                 user = user_service.create_user(user_create)
                 logger.info("Created new user with ID: %s", user.id)
@@ -216,7 +212,7 @@ def google_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
                 access_token=tokens["access_token"],
                 refresh_token=tokens.get("refresh_token"),
                 profile_data=user_data,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
             )
             db.add(oauth_account)
 
@@ -228,7 +224,6 @@ def google_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
         logger.info("JWT token created for user: %s", user.id)
 
         # 7) Redirect to frontend auth callback page with token
-
         newly_created_user = (
             not oauth_account
             or oauth_account.created_at
@@ -258,32 +253,28 @@ def google_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
 @router.get("/linkedin/url")
 def get_linkedin_oauth_url(db: Session = Depends(get_db)):
     try:
-        # 1) Generate state
         state = secrets.token_urlsafe(32)
         logger.info("Generating LinkedIn OAuth state %s", state[:8])
 
-        # 2) Sanity-check config
         logger.info("LINKEDIN_CLIENT_ID set? %s", bool(settings.LINKEDIN_CLIENT_ID))
         logger.info("LINKEDIN_REDIRECT_URI: %s", settings.LINKEDIN_REDIRECT_URI)
 
-        # 3) Persist state
         oauth_state = OAuthState(
             state=state,
             provider="linkedin",
-            created_at=datetime.utcnow(),
-            expires_at=datetime.utcnow() + timedelta(minutes=10),
+            created_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
         )
         db.add(oauth_state)
         db.commit()
         db.refresh(oauth_state)
         logger.info("OAuthState committed for provider=linkedin")
 
-        # 4) Build LinkedIn OAuth URL
         params = {
             "client_id": settings.LINKEDIN_CLIENT_ID,
             "redirect_uri": settings.LINKEDIN_REDIRECT_URI,
             "response_type": "code",
-            "scope": "openid profile email",  # LinkedIn v2 API scopes
+            "scope": "openid profile email",
             "state": state,
         }
         auth_url = (
@@ -309,14 +300,13 @@ def linkedin_oauth_callback(code: str, state: str, db: Session = Depends(get_db)
             state[:8] + "..." if state else "None",
         )
 
-        # 1) Verify state (same as Google)
         oauth_state = (
             db.query(OAuthState)
             .filter(
                 OAuthState.state == state,
                 OAuthState.provider == "linkedin",
                 OAuthState.used.is_not(True),
-                OAuthState.expires_at > datetime.utcnow(),
+                OAuthState.expires_at > datetime.now(timezone.utc),
             )
             .first()
         )
@@ -326,12 +316,10 @@ def linkedin_oauth_callback(code: str, state: str, db: Session = Depends(get_db)
             error_url = f"{settings.FRONTEND_URL}/auth/error?message=invalid_state"
             return RedirectResponse(url=error_url)
 
-        # 2) Mark state as used
         oauth_state.used = True
         db.commit()
         logger.info("LinkedIn OAuth state marked as used: %s", state[:8])
 
-        # 3) Exchange code for tokens
         token_url = "https://www.linkedin.com/oauth/v2/accessToken"
         token_data = {
             "client_id": settings.LINKEDIN_CLIENT_ID,
@@ -360,7 +348,6 @@ def linkedin_oauth_callback(code: str, state: str, db: Session = Depends(get_db)
 
         logger.info("Successfully received tokens from LinkedIn")
 
-        # 4) Get user profile from LinkedIn using OpenID Connect userinfo endpoint
         profile_url = "https://api.linkedin.com/v2/userinfo"
         headers = {"Authorization": f"Bearer {tokens['access_token']}"}
 
@@ -369,16 +356,6 @@ def linkedin_oauth_callback(code: str, state: str, db: Session = Depends(get_db)
             profile_response.raise_for_status()
             userinfo_data = profile_response.json()
 
-        # OpenID Connect userinfo response format:
-        # {
-        #   "sub": "user_id",
-        #   "name": "Full Name",
-        #   "given_name": "First",
-        #   "family_name": "Last",
-        #   "email": "user@example.com"
-        # }
-
-        # Map OpenID Connect format to our expected format
         user_data = {
             "id": userinfo_data["sub"],
             "email": userinfo_data["email"],
@@ -394,7 +371,6 @@ def linkedin_oauth_callback(code: str, state: str, db: Session = Depends(get_db)
             "LinkedIn user data received for: %s", user_data.get("email", "unknown")
         )
 
-        # 7) Find or create user account (same logic as Google)
         oauth_account = (
             db.query(OAuthAccount)
             .filter(
@@ -405,28 +381,24 @@ def linkedin_oauth_callback(code: str, state: str, db: Session = Depends(get_db)
         )
 
         if oauth_account:
-            # Update existing OAuth account
             logger.info(
                 "Updating existing LinkedIn OAuth account for user: %s",
                 oauth_account.user_id,
             )
             oauth_account.access_token = tokens["access_token"]
             oauth_account.profile_data = user_data
-            oauth_account.updated_at = datetime.utcnow()
+            oauth_account.updated_at = datetime.now(timezone.utc)
             user = oauth_account.user
         else:
-            # Check if user exists by email
             user = db.query(User).filter(User.email == user_data["email"]).first()
 
             if not user:
-                # Create new user
                 logger.info(
                     "Creating new user account for LinkedIn user: %s",
                     user_data.get("email"),
                 )
                 user_service = UserService(db)
 
-                # Generate username from email
                 base_username = user_data["email"].split("@")[0]
                 base_username = "".join(
                     c if c.isalnum() or c in "_-" else "_" for c in base_username
@@ -456,7 +428,6 @@ def linkedin_oauth_callback(code: str, state: str, db: Session = Depends(get_db)
                     "Linking LinkedIn OAuth account to existing user: %s", user.id
                 )
 
-            # Create OAuth account link
             oauth_account = OAuthAccount(
                 user_id=user.id,
                 provider="linkedin",
@@ -464,18 +435,16 @@ def linkedin_oauth_callback(code: str, state: str, db: Session = Depends(get_db)
                 email=user_data["email"],
                 access_token=tokens["access_token"],
                 profile_data=user_data,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
             )
             db.add(oauth_account)
 
         db.commit()
         logger.info("LinkedIn OAuth account setup completed for user: %s", user.id)
 
-        # 8) Create JWT token and redirect (same as Google)
         access_token = create_access_token(subject=user.id)
         logger.info("JWT token created for LinkedIn user: %s", user.id)
 
-        # Check if this is a newly created user
         newly_created_user = (
             not oauth_account
             or oauth_account.created_at
@@ -508,32 +477,28 @@ def linkedin_oauth_callback(code: str, state: str, db: Session = Depends(get_db)
 def get_tiktok_oauth_url(db: Session = Depends(get_db)):
     """Get TikTok OAuth URL"""
     try:
-        # 1) Generate state
         state = secrets.token_urlsafe(32)
         logger.info("Generating TikTok OAuth state %s", state[:8])
 
-        # 2) Sanity-check config
         logger.info("TIKTOK_CLIENT_ID set? %s", bool(settings.TIKTOK_CLIENT_ID))
         logger.info("TIKTOK_REDIRECT_URI: %s", settings.TIKTOK_REDIRECT_URI)
 
-        # 3) Persist state
         oauth_state = OAuthState(
             state=state,
             provider="tiktok",
-            created_at=datetime.utcnow(),
-            expires_at=datetime.utcnow() + timedelta(minutes=10),
+            created_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
         )
         db.add(oauth_state)
         db.commit()
         db.refresh(oauth_state)
         logger.info("OAuthState committed for provider=tiktok")
 
-        # 4) Build TikTok OAuth URL
         params = {
-            "client_key": settings.TIKTOK_CLIENT_ID,  # Note: TikTok uses client_key
+            "client_key": settings.TIKTOK_CLIENT_ID,
             "redirect_uri": settings.TIKTOK_REDIRECT_URI,
             "response_type": "code",
-            "scope": "user.info.basic",  # TikTok scope for basic user info
+            "scope": "user.info.basic",
             "state": state,
         }
         auth_url = "https://www.tiktok.com/v2/auth/authorize?" + urllib.parse.urlencode(
@@ -558,14 +523,13 @@ def tiktok_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
             state[:8] + "..." if state else "None",
         )
 
-        # 1) Verify state
         oauth_state = (
             db.query(OAuthState)
             .filter(
                 OAuthState.state == state,
                 OAuthState.provider == "tiktok",
                 OAuthState.used.is_not(True),
-                OAuthState.expires_at > datetime.utcnow(),
+                OAuthState.expires_at > datetime.now(timezone.utc),
             )
             .first()
         )
@@ -575,12 +539,10 @@ def tiktok_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
             error_url = f"{settings.FRONTEND_URL}/auth/error?message=invalid_state"
             return RedirectResponse(url=error_url)
 
-        # 2) Mark state as used
         oauth_state.used = True
         db.commit()
         logger.info("TikTok OAuth state marked as used: %s", state[:8])
 
-        # 3) Exchange code for tokens
         token_url = "https://open.tiktokapis.com/v2/oauth/token/"
         token_data = {
             "client_key": settings.TIKTOK_CLIENT_ID,
@@ -607,14 +569,12 @@ def tiktok_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
 
         logger.info("Successfully received tokens from TikTok")
 
-        # 4) Get user profile from TikTok
         profile_url = "https://open.tiktokapis.com/v2/user/info/"
         headers = {
             "Authorization": f"Bearer {tokens['access_token']}",
             "Content-Type": "application/json",
         }
 
-        # TikTok requires POST with JSON body specifying fields
         request_body = {"fields": ["open_id", "union_id", "avatar_url", "display_name"]}
 
         with httpx.Client() as client:
@@ -624,27 +584,13 @@ def tiktok_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
             profile_response.raise_for_status()
             profile_data = profile_response.json()
 
-        # TikTok API response format:
-        # {
-        #   "data": {
-        #     "user": {
-        #       "open_id": "user_id",
-        #       "union_id": "union_id",
-        #       "avatar_url": "profile_pic",
-        #       "display_name": "Username"
-        #     }
-        #   }
-        # }
-
         user_info = profile_data["data"]["user"]
 
-        # Map TikTok format to our expected format
-        # NOTE: TikTok doesn't provide email, so we'll need to handle that
         user_data = {
             "id": user_info["open_id"],
-            "email": None,  # TikTok doesn't provide email!
+            "email": None,
             "given_name": user_info.get("display_name", ""),
-            "family_name": "",  # TikTok doesn't provide separate names
+            "family_name": "",
             "name": user_info.get("display_name", "TikTok User"),
             "avatar_url": user_info.get("avatar_url", ""),
         }
@@ -653,7 +599,6 @@ def tiktok_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
             "TikTok user data received for: %s", user_data.get("name", "unknown")
         )
 
-        # 5) Handle user creation - SPECIAL CASE for no email
         oauth_account = (
             db.query(OAuthAccount)
             .filter(
@@ -664,34 +609,26 @@ def tiktok_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
         )
 
         if oauth_account:
-            # Update existing OAuth account
             logger.info(
                 "Updating existing TikTok OAuth account for user: %s",
                 oauth_account.user_id,
             )
             oauth_account.access_token = tokens["access_token"]
             oauth_account.profile_data = user_data
-            oauth_account.updated_at = datetime.utcnow()
+            oauth_account.updated_at = datetime.now(timezone.utc)
             user = oauth_account.user
         else:
-            # For TikTok, we can't link by email since there is none
-            # We'll need to create a new user account OR prompt for email
-
-            # Option 1: Create user with generated email
             generated_email = f"tiktok_{user_data['id']}@magicscholar.com"
 
-            # Check if this generated email already exists
             existing_user = db.query(User).filter(User.email == generated_email).first()
 
             if not existing_user:
-                # Create new user
                 logger.info(
                     "Creating new user account for TikTok user: %s",
                     user_data.get("name"),
                 )
                 user_service = UserService(db)
 
-                # Generate username from display name
                 base_username = user_data.get("name", "tiktok_user").lower()
                 base_username = "".join(
                     c if c.isalnum() or c in "_-" else "_" for c in base_username
@@ -706,7 +643,7 @@ def tiktok_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
                     counter += 1
 
                 user_create = UserCreate(
-                    email=generated_email,  # Generated email
+                    email=generated_email,
                     username=username,
                     first_name=user_data.get("given_name", ""),
                     last_name=user_data.get("family_name", ""),
@@ -718,7 +655,6 @@ def tiktok_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
                 user = existing_user
                 logger.info("Using existing user for TikTok OAuth: %s", user.id)
 
-            # Create OAuth account link
             oauth_account = OAuthAccount(
                 user_id=user.id,
                 provider="tiktok",
@@ -726,18 +662,16 @@ def tiktok_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
                 email=generated_email,
                 access_token=tokens["access_token"],
                 profile_data=user_data,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
             )
             db.add(oauth_account)
 
         db.commit()
         logger.info("TikTok OAuth account setup completed for user: %s", user.id)
 
-        # 6) Create JWT token and redirect
         access_token = create_access_token(subject=user.id)
         logger.info("JWT token created for TikTok user: %s", user.id)
 
-        # Check if this is a newly created user
         newly_created_user = (
             not oauth_account
             or oauth_account.created_at
@@ -767,7 +701,9 @@ def tiktok_oauth_callback(code: str, state: str, db: Session = Depends(get_db)):
 @router.delete("/cleanup-expired-states")
 async def cleanup_expired_states(db: Session = Depends(get_db)):
     expired_states = (
-        db.query(OAuthState).filter(OAuthState.expires_at < datetime.utcnow()).delete()
+        db.query(OAuthState)
+        .filter(OAuthState.expires_at < datetime.now(timezone.utc))
+        .delete()
     )
     db.commit()
     return {"deleted": expired_states}
