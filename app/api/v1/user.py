@@ -32,15 +32,7 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
 
     # Create the user
     user = user_service.create_user(user_data)
-
-    # Add token creation
-    access_token = create_access_token(subject=user.id)
-    return LoginResponse(
-        access_token=access_token,
-        token_type="bearer",
-        expires_in=1800,
-        user=UserResponse.model_validate(user).model_dump(),
-    )
+    return UserResponse.model_validate(user)
 
 
 # UPDATED: Add OAuth2 form support for frontend compatibility
