@@ -1,9 +1,8 @@
+# app/schemas/auth.py - FIXED
 from __future__ import annotations
 from pydantic import BaseModel, EmailStr
 from typing import Optional
-
-# Remove this import - it causes the circular dependency
-# from app.schemas.user import UserResponse
+from datetime import datetime
 
 
 class LoginRequest(BaseModel):
@@ -18,13 +17,28 @@ class LoginRequest(BaseModel):
         }
 
 
+class UserResponseSimple(BaseModel):
+    """Simple user response for login (avoids circular import)"""
+
+    id: int
+    email: str
+    username: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class LoginResponse(BaseModel):
     """Complete login response with user info and tokens"""
 
     access_token: str
     token_type: str
     expires_in: int
-    user: dict  # Change this to dict instead of UserResponse
+    user: UserResponseSimple
 
     class Config:
         json_schema_extra = {

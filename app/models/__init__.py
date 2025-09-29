@@ -1,27 +1,22 @@
 # app/models/__init__.py
-"""
-SQLAlchemy models for MagicScholar.
-
-Import all models here to ensure they are registered with SQLAlchemy
-when the application starts.
-"""
-
-from .user import User
-from .profile import UserProfile
-from .oauth import OAuthAccount, OAuthState
-from .institution import Institution
-from .tuition import TuitionData  # Changed from Tuition to TuitionData
-
-
-# Import other models as they're created:
-# from .scholarship import Scholarship, ScholarshipMatch
-# from .review import Review
+from app.models.user import User
+from app.models.profile import UserProfile
+from app.models.institution import Institution
+from app.models.institution_match import InstitutionMatch  # ADD THIS
+from app.models.scholarship import Scholarship, ScholarshipMatch
+from app.models.tuition import TuitionData
+from app.models.oauth import OAuthAccount, OAuthState
+from app.models.essay import Essay
 
 __all__ = [
     "User",
     "UserProfile",
+    "Institution",
+    "InstitutionMatch",  # ADD THIS
+    "Scholarship",
+    "ScholarshipMatch",
+    "TuitionData",
     "OAuthAccount",
     "OAuthState",
-    "Institution",
-    "TuitionData",  # Changed from Tuition to TuitionData
+    "Essay",
 ]

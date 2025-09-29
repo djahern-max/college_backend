@@ -1,4 +1,4 @@
-# app/models/user.py - UPDATED
+# app/models/user.py - FIXED
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -34,6 +34,30 @@ class User(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
     last_login_at = Column(DateTime(timezone=True), nullable=True)
 
+    # ===========================
+    # RELATIONSHIPS - FIXED
+    # ===========================
+    oauth_accounts = relationship(
+        "OAuthAccount", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    profile = relationship(
+        "UserProfile",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+    institution_matches = relationship(
+        "InstitutionMatch", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    scholarship_matches = relationship(
+        "ScholarshipMatch", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    essays = relationship("Essay", back_populates="user", cascade="all, delete-orphan")
+
     def __repr__(self):
         return f"<User(id={self.id}, email='{self.email}', username='{self.username}')>"
 
@@ -47,19 +71,3 @@ class User(Base):
         elif self.last_name:
             return self.last_name
         return self.username
-
-    # Relationships
-    oauth_accounts = relationship(
-        "OAuthAccount", back_populates="user", cascade="all, delete-orphan"
-    )
-    profile = relationship(
-        "UserProfile",
-        back_populates="user",
-        uselist=False,
-        cascade="all, delete-orphan",
-    )
-
-    # TODO: Add this back after ScholarshipMatch model is created
-    # scholarship_matches = relationship(
-    #     "ScholarshipMatch", back_populates="user", cascade="all, delete-orphan"
-    # )

@@ -75,9 +75,7 @@ class Institution(Base):
     # PRIMARY KEY & IDENTIFICATION
     # ===========================
     id = Column(Integer, primary_key=True, index=True)
-    ipeds_id = Column(
-        Integer, unique=True, nullable=False, index=True
-    )  # UNITID from IPEDS
+    ipeds_id = Column(Integer, unique=True, nullable=False, index=True)
 
     # ===========================
     # BASIC INFORMATION
@@ -89,7 +87,7 @@ class Institution(Base):
     # ===========================
     address = Column(String(500), nullable=True)
     city = Column(String(100), nullable=False, index=True)
-    state = Column(String(2), nullable=False, index=True)  # Two-letter state code
+    state = Column(String(2), nullable=False, index=True)
     zip_code = Column(String(10), nullable=True)
     region = Column(SQLEnum(USRegion), nullable=True, index=True)
 
@@ -125,14 +123,12 @@ class Institution(Base):
         comment="Quality score 0-100 for ranking schools by image quality",
         index=True,
     )
-
     customer_rank = Column(
         Integer,
         nullable=True,
         comment="Customer ranking for advertising priority (higher = better placement)",
         index=True,
     )
-
     logo_image_url = Column(
         String(500),
         nullable=True,
@@ -157,11 +153,14 @@ class Institution(Base):
     )
 
     # ===========================
-    # RELATIONSHIPS
+    # RELATIONSHIPS - FIXED: Only Institution-specific relationships
     # ===========================
-
     tuition_data = relationship(
         "TuitionData", back_populates="institution", cascade="all, delete-orphan"
+    )
+
+    matches = relationship(
+        "InstitutionMatch", back_populates="institution", cascade="all, delete-orphan"
     )
 
     def __repr__(self):
@@ -198,7 +197,7 @@ class Institution(Base):
 
     @property
     def is_private(self) -> bool:
-        """Check if institution is private (nonprofit or for-profit)"""
+        """Check if institution is private"""
         return self.control_type in [
             ControlType.PRIVATE_NONPROFIT,
             ControlType.PRIVATE_FOR_PROFIT,
@@ -239,14 +238,12 @@ class Institution(Base):
         elif self.logo_image_url:
             return self.logo_image_url
         else:
-            # Return a placeholder or category-based fallback
             return self._get_fallback_image_url()
 
     def _get_fallback_image_url(self) -> str:
         """Get fallback image based on institution characteristics"""
         base_url = "https://magicscholar-images.nyc3.digitaloceanspaces.com/fallbacks/"
 
-        # You can customize these based on your fallback image strategy
         if self.control_type == ControlType.PUBLIC:
             if self.size_category in [SizeCategory.LARGE, SizeCategory.VERY_LARGE]:
                 return f"{base_url}large_public_university.jpg"
@@ -276,7 +273,7 @@ class Institution(Base):
         self.image_extraction_date = datetime.utcnow()
 
     def update_customer_rank(self, new_rank: int) -> None:
-        """Update customer ranking (for when they upgrade/downgrade their advertising package)"""
+        """Update customer ranking"""
         self.customer_rank = new_rank
 
     # ===========================
@@ -286,7 +283,7 @@ class Institution(Base):
     def get_by_image_quality(
         cls, session: Session, limit: int = 50, min_score: int = 60
     ) -> List["Institution"]:
-        """Get institutions ordered by image quality for featured display"""
+        """Get institutions ordered by image quality"""
         return (
             session.query(cls)
             .filter(cls.primary_image_quality_score >= min_score)
@@ -315,7 +312,7 @@ class Institution(Base):
     def get_featured_institutions(
         cls, db: Session, limit: int = 20, offset: int = 0, min_quality: int = 60
     ) -> List["Institution"]:
-        """Get featured institutions ordered by customer_rank first, then image quality"""
+        """Get featured institutions ordered by customer_rank"""
         return (
             db.query(cls)
             .filter(
@@ -338,7 +335,7 @@ class Institution(Base):
     def get_by_customer_priority(
         cls, db: Session, limit: int = 50, offset: int = 0
     ) -> List["Institution"]:
-        """Get institutions ordered by customer ranking (advertising priority)"""
+        """Get institutions ordered by customer ranking"""
         return (
             db.query(cls)
             .order_by(

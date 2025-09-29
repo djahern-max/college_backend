@@ -1,5 +1,5 @@
 # app/schemas/profile.py - UPDATED VERSION
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from app.models.profile import IncomeRange, ProfileTier, CollegeSize
@@ -408,6 +408,22 @@ class ProfileBase(BaseModel):
     parent_education_level: Optional[str] = Field(None, max_length=100)
     parent_occupation: Optional[str] = Field(None, max_length=100)
     parent_employer: Optional[str] = Field(None, max_length=255)
+
+    household_income_range: Optional[IncomeRange] = Field(
+        None,
+        description="Household income range",
+        alias="family_income_range",  # Accept both names
+    )
+
+    family_size: Optional[int] = Field(
+        None,
+        ge=1,
+        le=20,
+        description="Number of people in household",
+        alias="household_size",  # Accept both names
+    )
+
+    model_config = ConfigDict(populate_by_name=True)  # Allow both field name and alias
 
 
 class ProfileCreate(ProfileBase):

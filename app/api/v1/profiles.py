@@ -19,7 +19,7 @@ async def get_current_user_profile(
 ):
     """Get current user's profile - returns 404 if no profile exists"""
     profile_service = ProfileService(db)
-    profile = profile_service.get_by_user_id(current_user["id"])
+    profile = profile_service.get_profile_by_user_id(current_user["id"])  # FIXED
 
     if not profile:
         raise HTTPException(
