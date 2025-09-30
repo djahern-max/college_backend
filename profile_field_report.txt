@@ -1,0 +1,134 @@
+================================================================================
+PROFILE FIELD REPORT - User: dahern
+================================================================================
+
+
+BASIC INFORMATION
+--------------------------------------------------------------------------------
+FILLED   high_school_name                         "Test High School"
+FILLED   graduation_year                          2026
+FILLED   gpa                                      3.5
+FILLED   gpa_scale                                "4.0"
+FILLED   intended_major                           "Computer Science"
+FILLED   state                                    "NH"
+EMPTY    city                                     (empty)
+EMPTY    zip_code                                 (empty)
+EMPTY    date_of_birth                            (empty)
+EMPTY    phone_number                             (empty)
+
+Category: 6/10 (60.0%)
+
+TEST SCORES
+--------------------------------------------------------------------------------
+EMPTY    sat_score                                (empty)
+EMPTY    act_score                                (empty)
+EMPTY    sat_math                                 (empty)
+EMPTY    sat_verbal                               (empty)
+EMPTY    act_math                                 (empty)
+EMPTY    act_english                              (empty)
+EMPTY    act_science                              (empty)
+EMPTY    act_reading                              (empty)
+
+Category: 0/8 (0.0%)
+
+ACADEMIC DETAILS
+--------------------------------------------------------------------------------
+EMPTY    secondary_major                          (empty)
+EMPTY    minor_interests                          (empty)
+FILLED   academic_interests                       ['Computer Science']
+EMPTY    career_goals                             (empty)
+EMPTY    ap_courses                               (empty)
+EMPTY    honors_courses                           (empty)
+EMPTY    dual_enrollment                          False
+EMPTY    class_rank                               (empty)
+EMPTY    class_size                               (empty)
+
+Category: 1/9 (11.1%)
+
+ACTIVITIES & EXPERIENCE
+--------------------------------------------------------------------------------
+EMPTY    extracurricular_activities               (empty)
+EMPTY    volunteer_experience                     (empty)
+EMPTY    volunteer_hours                          (empty)
+EMPTY    work_experience                          (empty)
+EMPTY    leadership_positions                     (empty)
+EMPTY    awards_honors                            (empty)
+EMPTY    competitions                             (empty)
+EMPTY    sports_activities                        (empty)
+EMPTY    arts_activities                          (empty)
+EMPTY    musical_instruments                      (empty)
+
+Category: 0/10 (0.0%)
+
+DEMOGRAPHICS
+--------------------------------------------------------------------------------
+EMPTY    ethnicity                                (empty)
+EMPTY    gender                                   (empty)
+EMPTY    first_generation_college                 (empty)
+EMPTY    family_income_range                      (empty)
+EMPTY    household_size                           (empty)
+EMPTY    military_connection                      False
+EMPTY    disability_status                        (empty)
+EMPTY    lgbtq_identification                     (empty)
+EMPTY    rural_background                         (empty)
+
+Category: 0/9 (0.0%)
+
+COLLEGE PREFERENCES
+--------------------------------------------------------------------------------
+EMPTY    preferred_college_size                   (empty)
+EMPTY    preferred_states                         (empty)
+EMPTY    college_application_status               (empty)
+EMPTY    max_tuition_budget                       (empty)
+EMPTY    financial_aid_needed                     (empty)
+EMPTY    work_study_interest                      False
+EMPTY    campus_setting                           (empty)
+EMPTY    religious_affiliation                    (empty)
+EMPTY    greek_life_interest                      (empty)
+EMPTY    research_opportunities_important         False
+EMPTY    study_abroad_interest                    False
+
+Category: 0/11 (0.0%)
+
+ESSAYS & STATEMENTS
+--------------------------------------------------------------------------------
+EMPTY    has_personal_statement                   False
+EMPTY    has_leadership_essay                     False
+EMPTY    has_challenges_essay                     False
+EMPTY    has_diversity_essay                      False
+EMPTY    has_community_service_essay              False
+EMPTY    has_academic_interest_essay              False
+
+Category: 0/6 (0.0%)
+
+SCHOLARSHIP PREFERENCES
+--------------------------------------------------------------------------------
+EMPTY    scholarship_types_interested             (empty)
+EMPTY    application_deadline_preference          (empty)
+EMPTY    min_scholarship_amount                   (empty)
+EMPTY    renewable_scholarships_only              False
+FILLED   local_scholarships_priority              True
+
+Category: 1/5 (20.0%)
+
+ADDITIONAL
+--------------------------------------------------------------------------------
+EMPTY    languages_spoken                         (empty)
+EMPTY    special_talents                          (empty)
+EMPTY    certifications                           (empty)
+EMPTY    additional_notes                         (empty)
+EMPTY    parent_education_level                   (empty)
+EMPTY    parent_occupation                        (empty)
+EMPTY    parent_employer                          (empty)
+
+Category: 0/7 (0.0%)
+
+================================================================================
+SUMMARY
+================================================================================
+Total fields:     75
+Filled:           8
+Empty:            67
+Completion:       10.7%
+DB Percentage:    54%
+================================================================================

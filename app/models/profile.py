@@ -231,67 +231,97 @@ class UserProfile(Base):
         return f"<UserProfile(id={self.id}, user_id={self.user_id}, tier={self.profile_tier})>"
 
     def calculate_completion_percentage(self) -> int:
-        """Calculate profile completion percentage with tier-based weighting"""
-        try:
-            # Basic tier fields (required for initial functionality)
-            basic_fields = [
-                self.high_school_name,
-                self.graduation_year,
-                self.gpa,
-                self.intended_major,
-                self.state,
-                bool(self.sat_score or self.act_score),
-            ]
+        """Calculate TRUE overall completion across all fields"""
+        all_fields = [
+            # Basic (10 fields)
+            self.high_school_name,
+            self.graduation_year,
+            self.gpa,
+            self.gpa_scale,
+            self.intended_major,
+            self.state,
+            self.city,
+            self.zip_code,
+            self.date_of_birth,
+            self.phone_number,
+            # Test Scores (8 fields) - count as 1 if ANY score present
+            bool(
+                self.sat_score
+                or self.act_score
+                or self.sat_math
+                or self.sat_verbal
+                or self.act_math
+                or self.act_english
+                or self.act_science
+                or self.act_reading
+            ),
+            # Academic (8 fields)
+            self.secondary_major,
+            self.minor_interests,
+            self.academic_interests,
+            self.career_goals,
+            self.ap_courses,
+            self.honors_courses,
+            self.dual_enrollment,
+            self.class_rank,
+            # Activities (10 fields)
+            self.extracurricular_activities,
+            self.volunteer_experience,
+            self.volunteer_hours,
+            self.work_experience,
+            self.leadership_positions,
+            self.awards_honors,
+            self.competitions,
+            self.sports_activities,
+            self.arts_activities,
+            self.musical_instruments,
+            # Demographics (9 fields)
+            self.ethnicity,
+            self.gender,
+            self.first_generation_college,
+            self.family_income_range,
+            self.household_size,
+            self.military_connection,
+            self.disability_status,
+            self.lgbtq_identification,
+            self.rural_background,
+            # Preferences (11 fields)
+            self.preferred_college_size,
+            self.preferred_states,
+            self.college_application_status,
+            self.max_tuition_budget,
+            self.financial_aid_needed,
+            self.work_study_interest,
+            self.campus_setting,
+            self.religious_affiliation,
+            self.greek_life_interest,
+            self.research_opportunities_important,
+            self.study_abroad_interest,
+            # Essays (6 fields)
+            self.has_personal_statement,
+            self.has_leadership_essay,
+            self.has_challenges_essay,
+            self.has_diversity_essay,
+            self.has_community_service_essay,
+            self.has_academic_interest_essay,
+            # Scholarship Preferences (5 fields)
+            self.scholarship_types_interested,
+            self.application_deadline_preference,
+            self.min_scholarship_amount,
+            self.renewable_scholarships_only,
+            self.local_scholarships_priority,
+            # Additional (7 fields)
+            self.languages_spoken,
+            self.special_talents,
+            self.certifications,
+            self.additional_notes,
+            self.parent_education_level,
+            self.parent_occupation,
+            self.parent_employer,
+        ]
 
-            basic_completed = sum(
-                1 for field in basic_fields if self._is_field_completed(field)
-            )
-            basic_percentage = (basic_completed / len(basic_fields)) * 100
-
-            # If still in basic tier, just return basic percentage
-            if self.profile_tier == "basic":
-                return int(basic_percentage)
-
-            # Enhanced tier adds activities and demographics
-            enhanced_fields = [
-                self.extracurricular_activities,
-                self.volunteer_experience,
-                self.leadership_positions,
-                self.ethnicity,
-                self.first_generation_college,
-            ]
-
-            enhanced_completed = sum(
-                1 for field in enhanced_fields if self._is_field_completed(field)
-            )
-            enhanced_percentage = (enhanced_completed / len(enhanced_fields)) * 100
-
-            if self.profile_tier == "enhanced":
-                return int((basic_percentage * 0.7) + (enhanced_percentage * 0.3))
-
-            # Complete tier adds preferences and essays
-            complete_fields = [
-                self.has_personal_statement,
-                self.preferred_college_size,
-                self.career_goals,
-                self.scholarship_types_interested,
-            ]
-
-            complete_completed = sum(
-                1 for field in complete_fields if self._is_field_completed(field)
-            )
-            complete_percentage = (complete_completed / len(complete_fields)) * 100
-
-            # Weighted average across all tiers
-            return int(
-                (basic_percentage * 0.5)
-                + (enhanced_percentage * 0.3)
-                + (complete_percentage * 0.2)
-            )
-
-        except Exception as e:
-            logger.error(f"Error calculating completion percentage: {str(e)}")
-            return 0
+        filled = sum(1 for field in all_fields if self._is_field_completed(field))
+        return int((filled / len(all_fields)) * 100)
 
     def _is_field_completed(self, field) -> bool:
         """Check if a field is meaningfully completed"""
