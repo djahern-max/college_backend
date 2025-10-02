@@ -1,71 +1,139 @@
-# app/api/v1/profiles.py - New file needed for profiles endpoints
-from fastapi import APIRouter, Depends, HTTPException, status
+# app/api/v1/profiles.py
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from typing import Optional
 
 from app.core.database import get_db
 from app.api.deps import get_current_user
-from app.services.profile import ProfileService  # You'll need to create this
-from app.schemas.profile import (
-    ProfileResponse,
-    ProfileCreate,
-)  # You'll need these schemas
+from app.models.profile import UserProfile
+from app.models.institution import Institution
 
 router = APIRouter()
 
 
-@router.get("/me", response_model=ProfileResponse)
-async def get_current_user_profile(
+class ProfileUpdate(BaseModel):
+    """Simple update model - only state for now"""
+
+    state: Optional[str] = None
+    preferred_states: Optional[list[str]] = None
+
+
+class ProfileResponse(BaseModel):
+    """Simple response model"""
+
+    user_id: int
+    state: Optional[str] = None
+    preferred_states: Optional[list[str]] = None  # Add this
+    high_school_name: Optional[str] = None
+    graduation_year: Optional[int] = None
+    gpa: Optional[float] = None
+    intended_major: Optional[str] = None
+    academic_interests: Optional[list] = None
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/", response_model=ProfileResponse)
+async def get_profile(
     current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    """Get current user's profile - returns 404 if no profile exists"""
-    profile_service = ProfileService(db)
-    profile = profile_service.get_profile_by_user_id(current_user["id"])  # FIXED
+    """Get current user's profile"""
+    profile = (
+        db.query(UserProfile).filter(UserProfile.user_id == current_user["id"]).first()
+    )
 
     if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found"
+        # Return empty profile structure
+        return ProfileResponse(
+            user_id=current_user["id"],
+            state=None,
+            high_school_name=None,
+            graduation_year=None,
+            gpa=None,
+            intended_major=None,
+            academic_interests=None,
         )
 
-    return ProfileResponse.model_validate(profile)
+    return profile
 
 
-@router.post("/", response_model=ProfileResponse)
-async def create_user_profile(
-    profile_data: ProfileCreate,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Create a new profile for the current user"""
-    profile_service = ProfileService(db)
-
-    # Check if profile already exists
-    existing_profile = profile_service.get_by_user_id(current_user["id"])
-    if existing_profile:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Profile already exists. Use PUT to update.",
-        )
-
-    # Create the profile
-    profile = profile_service.create_profile(current_user["id"], profile_data)
-    return ProfileResponse.model_validate(profile)
-
-
-@router.put("/me", response_model=ProfileResponse)
-async def update_user_profile(
-    profile_data: ProfileCreate,
+@router.put("/", response_model=ProfileResponse)
+async def update_profile(
+    profile_data: ProfileUpdate,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Update current user's profile"""
-    profile_service = ProfileService(db)
+    profile = (
+        db.query(UserProfile).filter(UserProfile.user_id == current_user["id"]).first()
+    )
 
-    profile = profile_service.get_by_user_id(current_user["id"])
+    # Create if doesn't exist
     if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found"
+        profile = UserProfile(
+            user_id=current_user["id"], profile_tier="basic", profile_completed=False
+        )
+        db.add(profile)
+
+    # Update only provided fields
+    if profile_data.preferred_states is not None:
+        profile.preferred_states = profile_data.preferred_states
+
+    db.commit()
+    db.refresh(profile)
+
+    return profile
+
+
+@router.get("/school-matches")
+async def get_school_matches(
+    current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    """Get school matches based on profile state and preferred states"""
+
+    # Get profile
+    profile = (
+        db.query(UserProfile).filter(UserProfile.user_id == current_user["id"]).first()
+    )
+
+    # Build list of states to match
+    states_to_match = []
+    if profile and profile.state:
+        states_to_match.append(profile.state)
+    if profile and profile.preferred_states:
+        states_to_match.extend(profile.preferred_states)
+
+    # Remove duplicates
+    states_to_match = list(set(states_to_match))
+
+    if not states_to_match:
+        return {
+            "matches": [],
+            "total": 0,
+            "message": "Add your state preferences to see school matches",
+        }
+
+    # Get schools in selected states
+    schools = (
+        db.query(Institution)
+        .filter(Institution.state.in_(states_to_match))
+        .limit(50)
+        .all()
+    )
+
+    # Format response
+    matches = []
+    for school in schools:
+        matches.append(
+            {
+                "id": school.id,
+                "name": school.name,
+                "city": school.city,
+                "state": school.state,
+                "match_score": 100,  # Simple: in preferred states = 100% match
+            }
         )
 
-    # Update the profile
-    updated_profile = profile_service.update_profile(profile.id, profile_data)
-    return ProfileResponse.model_validate(updated_profile)
+    return {"matches": matches, "total": len(matches)}

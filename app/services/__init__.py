@@ -7,7 +7,7 @@ They act as an abstraction layer between API endpoints and database models.
 """
 
 from .user import UserService
-from .profile import ProfileService
+
 from .oauth import OAuthService
 from .tuition import TuitionService
 

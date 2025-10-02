@@ -2,14 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.api.v1 import (
-    user,
-    oauth,
-    profile_onboarding,
-    scholarships,
-    institution,
-    tuition,
-)
+from app.api.v1 import user, oauth, scholarships, institution, tuition, profiles
 from fastapi.routing import APIRoute
 from fastapi.responses import PlainTextResponse
 
@@ -31,15 +24,15 @@ app.add_middleware(
 # Include routers (only the ones that exist)
 app.include_router(user.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(oauth.router, prefix="/api/v1/oauth", tags=["OAuth"])
-app.include_router(
-    profile_onboarding.router, prefix="/api/v1/profiles", tags=["Profiles"]
-)
+
 app.include_router(
     institution.router, prefix="/api/v1/institutions", tags=["Institutions"]
 )
 app.include_router(
     scholarships.router, prefix="/api/v1/scholarships", tags=["Scholarships"]
 )
+
+app.include_router(profiles.router, prefix="/api/v1/profiles", tags=["Profiles"])
 
 
 @app.get("/")
