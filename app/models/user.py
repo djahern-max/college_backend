@@ -1,4 +1,4 @@
-# app/models/user.py - FIXED
+# app/models/user.py - CLEANED UP
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -35,7 +35,7 @@ class User(Base):
     last_login_at = Column(DateTime(timezone=True), nullable=True)
 
     # ===========================
-    # RELATIONSHIPS - FIXED
+    # RELATIONSHIPS - ONLY EXISTING TABLES
     # ===========================
     oauth_accounts = relationship(
         "OAuthAccount", back_populates="user", cascade="all, delete-orphan"
@@ -48,15 +48,8 @@ class User(Base):
         cascade="all, delete-orphan",
     )
 
-    institution_matches = relationship(
-        "InstitutionMatch", back_populates="user", cascade="all, delete-orphan"
-    )
-
-    scholarship_matches = relationship(
-        "ScholarshipMatch", back_populates="user", cascade="all, delete-orphan"
-    )
-
-    essays = relationship("Essay", back_populates="user", cascade="all, delete-orphan")
+    # REMOVED: institution_matches (table dropped)
+    # REMOVED: essays (table dropped)
 
     def __repr__(self):
         return f"<User(id={self.id}, email='{self.email}', username='{self.username}')>"

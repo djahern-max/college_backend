@@ -1,24 +1,29 @@
 # app/services/scholarship.py - SIMPLIFIED VERSION
-from typing import Optional, List, Tuple
-from sqlalchemy.orm import Session
-from sqlalchemy import or_, func, desc, asc
-from datetime import datetime
+"""
+Streamlined scholarship service - removed references to dropped fields
+Only uses fields that exist in the simplified model
+"""
 
-from app.models.scholarship import Scholarship, ScholarshipStatus
-from app.schemas.scholarship import ScholarshipCreate, ScholarshipSearchFilter
+from typing import List, Tuple, Optional
+from sqlalchemy.orm import Session
+from sqlalchemy import or_, desc, asc
+from datetime import datetime
 import logging
+
+from app.models.scholarship import Scholarship, ScholarshipStatus, ScholarshipType
+from app.schemas.scholarship import ScholarshipCreate, ScholarshipSearchFilter
 
 logger = logging.getLogger(__name__)
 
 
 class ScholarshipService:
-    """Simplified service class for basic scholarship operations"""
+    """Service for scholarship operations"""
 
     def __init__(self, db: Session):
         self.db = db
 
     # ===========================
-    # BASIC CRUD OPERATIONS
+    # CREATE & UPDATE
     # ===========================
 
     def create_scholarship(
@@ -28,18 +33,13 @@ class ScholarshipService:
     ) -> Scholarship:
         """Create a new scholarship"""
         try:
-            db_scholarship = Scholarship(
-                **scholarship_data.model_dump(exclude_unset=True),
-                created_by=created_by_user_id,
-            )
+            db_scholarship = Scholarship(**scholarship_data.model_dump())
 
             self.db.add(db_scholarship)
             self.db.commit()
             self.db.refresh(db_scholarship)
 
-            logger.info(
-                f"Created scholarship: {db_scholarship.id} - {db_scholarship.title}"
-            )
+            logger.info(f"Created scholarship: {db_scholarship.id}")
             return db_scholarship
 
         except Exception as e:
@@ -47,52 +47,40 @@ class ScholarshipService:
             logger.error(f"Error creating scholarship: {str(e)}")
             raise Exception(f"Failed to create scholarship: {str(e)}")
 
+    # ===========================
+    # READ OPERATIONS
+    # ===========================
+
     def get_scholarship_by_id(self, scholarship_id: int) -> Optional[Scholarship]:
         """Get scholarship by ID"""
         return (
             self.db.query(Scholarship).filter(Scholarship.id == scholarship_id).first()
         )
 
-    def get_scholarships_paginated(
-        self, page: int = 1, limit: int = 50, active_only: bool = True
-    ) -> Tuple[List[Scholarship], int]:
-        """Get paginated list of scholarships"""
+    def get_all_scholarships(
+        self, skip: int = 0, limit: int = 100, active_only: bool = False
+    ) -> List[Scholarship]:
+        """Get all scholarships with optional filtering"""
+        query = self.db.query(Scholarship)
+
+        if active_only:
+            query = query.filter(Scholarship.status == ScholarshipStatus.ACTIVE)
+
+        return query.offset(skip).limit(limit).all()
+
+    def increment_view_count(self, scholarship_id: int) -> bool:
+        """Increment scholarship view count"""
         try:
-            query = self.db.query(Scholarship)
-
-            if active_only:
-                query = query.filter(Scholarship.status == ScholarshipStatus.ACTIVE)
-
-            # Count total results
-            total = query.count()
-
-            # Apply pagination
-            offset = (page - 1) * limit
-            scholarships = query.offset(offset).limit(limit).all()
-
-            return scholarships, total
-
-        except Exception as e:
-            logger.error(f"Error getting paginated scholarships: {str(e)}")
-            raise Exception(f"Failed to get scholarships: {str(e)}")
-
-    def delete_scholarship(self, scholarship_id: int) -> bool:
-        """Delete scholarship"""
-        try:
-            db_scholarship = self.get_scholarship_by_id(scholarship_id)
-            if not db_scholarship:
-                return False
-
-            self.db.delete(db_scholarship)
-            self.db.commit()
-
-            logger.info(f"Deleted scholarship: {scholarship_id}")
-            return True
-
+            scholarship = self.get_scholarship_by_id(scholarship_id)
+            if scholarship:
+                scholarship.views_count += 1
+                self.db.commit()
+                return True
+            return False
         except Exception as e:
             self.db.rollback()
-            logger.error(f"Error deleting scholarship {scholarship_id}: {str(e)}")
-            raise Exception(f"Failed to delete scholarship: {str(e)}")
+            logger.error(f"Error incrementing view count: {str(e)}")
+            return False
 
     # ===========================
     # SEARCH AND FILTERING
@@ -101,94 +89,51 @@ class ScholarshipService:
     def search_scholarships(
         self, filters: ScholarshipSearchFilter
     ) -> Tuple[List[Scholarship], int]:
-        """Search scholarships with filters"""
+        """
+        Search scholarships with simplified filters
+        Only uses fields that exist in the streamlined model
+        """
         try:
             query = self.db.query(Scholarship)
 
-            # Basic status filters
+            # Status filters
             if filters.active_only:
                 query = query.filter(Scholarship.status == ScholarshipStatus.ACTIVE)
 
             if filters.verified_only:
                 query = query.filter(Scholarship.verified == True)
 
+            if filters.featured_only:
+                query = query.filter(Scholarship.featured == True)
+
             # Scholarship type filter
             if filters.scholarship_type:
-                query = query.filter(
-                    Scholarship.scholarship_type == filters.scholarship_type
-                )
+                try:
+                    scholarship_type = ScholarshipType(filters.scholarship_type)
+                    query = query.filter(
+                        Scholarship.scholarship_type == scholarship_type
+                    )
+                except ValueError:
+                    logger.warning(
+                        f"Invalid scholarship type: {filters.scholarship_type}"
+                    )
 
-            # Text search
+            # Text search (only searchable fields: title, organization)
             if filters.search_query:
                 search_term = f"%{filters.search_query}%"
                 query = query.filter(
                     or_(
                         Scholarship.title.ilike(search_term),
-                        Scholarship.description.ilike(search_term),
                         Scholarship.organization.ilike(search_term),
                     )
                 )
 
-            # Financial filters
+            # Financial filters (only amount_exact exists now)
             if filters.min_amount:
-                query = query.filter(
-                    or_(
-                        Scholarship.amount_exact >= filters.min_amount,
-                        Scholarship.amount_min >= filters.min_amount,
-                        Scholarship.amount_max >= filters.min_amount,
-                    )
-                )
+                query = query.filter(Scholarship.amount_exact >= filters.min_amount)
 
             if filters.max_amount:
-                query = query.filter(
-                    or_(
-                        Scholarship.amount_exact <= filters.max_amount,
-                        Scholarship.amount_min <= filters.max_amount,
-                        Scholarship.amount_max <= filters.max_amount,
-                    )
-                )
-
-            # Academic filters for student matching
-            if filters.student_gpa:
-                query = query.filter(
-                    or_(
-                        Scholarship.min_gpa.is_(None),
-                        Scholarship.min_gpa <= filters.student_gpa,
-                    )
-                )
-
-            if filters.student_sat_score:
-                query = query.filter(
-                    or_(
-                        Scholarship.min_sat_score.is_(None),
-                        Scholarship.min_sat_score <= filters.student_sat_score,
-                    )
-                )
-
-            if filters.student_act_score:
-                query = query.filter(
-                    or_(
-                        Scholarship.min_act_score.is_(None),
-                        Scholarship.min_act_score <= filters.student_act_score,
-                    )
-                )
-
-            if filters.student_major:
-                query = query.filter(
-                    or_(
-                        Scholarship.required_majors.is_(None),
-                        Scholarship.required_majors.contains([filters.student_major]),
-                    )
-                )
-
-            # Geographic filters
-            if filters.student_state:
-                query = query.filter(
-                    or_(
-                        Scholarship.eligible_states.is_(None),
-                        Scholarship.eligible_states.contains([filters.student_state]),
-                    )
-                )
+                query = query.filter(Scholarship.amount_exact <= filters.max_amount)
 
             # Application requirement filters
             if filters.requires_essay is not None:
@@ -196,29 +141,26 @@ class ScholarshipService:
                     Scholarship.essay_required == filters.requires_essay
                 )
 
-            # Deadline filters (simplified)
-            if filters.deadline_after:
-                try:
-                    # Try to parse the date string
-                    deadline_date = datetime.fromisoformat(
-                        filters.deadline_after.replace("Z", "+00:00")
-                    )
-                    query = query.filter(
-                        or_(
-                            Scholarship.deadline.is_(None),
-                            Scholarship.deadline >= deadline_date,
-                        )
-                    )
-                except ValueError:
-                    logger.warning(
-                        f"Invalid deadline_after format: {filters.deadline_after}"
-                    )
+            if filters.requires_interview is not None:
+                query = query.filter(
+                    Scholarship.interview_required == filters.requires_interview
+                )
+
+            if filters.renewable_only:
+                query = query.filter(Scholarship.is_renewable == True)
 
             # Count total before pagination
             total = query.count()
 
-            # Sorting
-            sort_column = getattr(Scholarship, filters.sort_by, Scholarship.created_at)
+            # Sorting (only on existing fields)
+            valid_sort_fields = ["created_at", "amount_exact", "title", "views_count"]
+            sort_field = (
+                filters.sort_by
+                if filters.sort_by in valid_sort_fields
+                else "created_at"
+            )
+
+            sort_column = getattr(Scholarship, sort_field, Scholarship.created_at)
             if filters.sort_order == "desc":
                 query = query.order_by(desc(sort_column))
             else:
@@ -235,55 +177,77 @@ class ScholarshipService:
             raise Exception(f"Failed to search scholarships: {str(e)}")
 
     # ===========================
-    # UTILITY METHODS
+    # DELETE
     # ===========================
 
-    def increment_view_count(self, scholarship_id: int) -> bool:
-        """Increment the view count for a scholarship"""
+    def delete_scholarship(self, scholarship_id: int) -> bool:
+        """Delete a scholarship"""
         try:
-            db_scholarship = self.get_scholarship_by_id(scholarship_id)
-            if not db_scholarship:
+            scholarship = self.get_scholarship_by_id(scholarship_id)
+            if not scholarship:
                 return False
 
-            db_scholarship.views_count = (db_scholarship.views_count or 0) + 1
+            self.db.delete(scholarship)
             self.db.commit()
 
+            logger.info(f"Deleted scholarship: {scholarship_id}")
             return True
 
         except Exception as e:
             self.db.rollback()
-            logger.error(
-                f"Error incrementing view count for scholarship {scholarship_id}: {str(e)}"
-            )
-            return False
+            logger.error(f"Error deleting scholarship {scholarship_id}: {str(e)}")
+            raise Exception(f"Failed to delete scholarship: {str(e)}")
 
     # ===========================
     # BULK OPERATIONS
     # ===========================
 
     def bulk_create_scholarships(
-        self,
-        scholarships_data: List[ScholarshipCreate],
-        created_by_user_id: Optional[int] = None,
-    ) -> Tuple[List[Scholarship], List[str]]:
+        self, scholarships_data: List[ScholarshipCreate]
+    ) -> Tuple[List[Scholarship], List[dict]]:
         """Bulk create scholarships"""
         created_scholarships = []
         errors = []
 
-        try:
-            for i, scholarship_data in enumerate(scholarships_data):
-                try:
-                    scholarship = self.create_scholarship(
-                        scholarship_data, created_by_user_id
-                    )
-                    created_scholarships.append(scholarship)
-                except Exception as e:
-                    error_msg = f"Error creating scholarship {i+1}: {str(e)}"
-                    errors.append(error_msg)
-                    logger.error(error_msg)
+        for idx, scholarship_data in enumerate(scholarships_data):
+            try:
+                scholarship = self.create_scholarship(scholarship_data)
+                created_scholarships.append(scholarship)
+            except Exception as e:
+                errors.append(
+                    {"index": idx, "title": scholarship_data.title, "error": str(e)}
+                )
+                logger.error(f"Error creating scholarship at index {idx}: {str(e)}")
 
-            return created_scholarships, errors
+        return created_scholarships, errors
+
+    # ===========================
+    # STATISTICS
+    # ===========================
+
+    def get_scholarship_stats(self) -> dict:
+        """Get scholarship statistics"""
+        try:
+            total = self.db.query(Scholarship).count()
+            active = (
+                self.db.query(Scholarship)
+                .filter(Scholarship.status == ScholarshipStatus.ACTIVE)
+                .count()
+            )
+            verified = (
+                self.db.query(Scholarship).filter(Scholarship.verified == True).count()
+            )
+            featured = (
+                self.db.query(Scholarship).filter(Scholarship.featured == True).count()
+            )
+
+            return {
+                "total_scholarships": total,
+                "active_scholarships": active,
+                "verified_scholarships": verified,
+                "featured_scholarships": featured,
+            }
 
         except Exception as e:
-            logger.error(f"Error in bulk create scholarships: {str(e)}")
-            raise Exception(f"Bulk create failed: {str(e)}")
+            logger.error(f"Error getting scholarship stats: {str(e)}")
+            return {}

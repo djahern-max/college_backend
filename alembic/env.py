@@ -17,7 +17,7 @@ from app.models.profile import UserProfile
 from app.models.oauth import OAuthAccount, OAuthState
 
 # Add scholarship models when created
-from app.models.scholarship import Scholarship, ScholarshipMatch
+from app.models.scholarship import Scholarship
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

@@ -81,11 +81,6 @@ class Settings(BaseSettings):
     LINKEDIN_CLIENT_ID: str = ""
     LINKEDIN_CLIENT_SECRET: str = ""
 
-    # TikTok OAuth
-    TIKTOK_CLIENT_ID: str = ""
-    TIKTOK_CLIENT_SECRET: str = ""
-    TIKTOK_CLIENT_KEY: str = ""
-
     @validator("GOOGLE_CLIENT_ID")
     def validate_google_config(cls, v, values):
         environment = values.get("ENVIRONMENT", "development")
@@ -100,13 +95,6 @@ class Settings(BaseSettings):
             raise ValueError("LINKEDIN_CLIENT_ID is required in production")
         return v
 
-    @validator("TIKTOK_CLIENT_ID")
-    def validate_tiktok_config(cls, v, values):
-        environment = values.get("ENVIRONMENT", "development")
-        if environment == "production" and not v:
-            raise ValueError("TIKTOK_CLIENT_ID is required in production")
-        return v
-
     # OAuth Redirect URIs - Dynamic based on environment
     @property
     def GOOGLE_REDIRECT_URI(self) -> str:
@@ -115,10 +103,6 @@ class Settings(BaseSettings):
     @property
     def LINKEDIN_REDIRECT_URI(self) -> str:
         return f"{self.API_BASE_URL}/api/v1/oauth/linkedin/callback"
-
-    @property
-    def TIKTOK_REDIRECT_URI(self) -> str:
-        return f"{self.API_BASE_URL}/api/v1/oauth/tiktok/callback"
 
     class Config:
         case_sensitive = True

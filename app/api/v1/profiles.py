@@ -1,38 +1,19 @@
-# app/api/v1/profiles.py
-from fastapi import APIRouter, Depends, HTTPException
+# app/api/v1/profiles.py - CLEANED UP
+"""
+Simplified profiles API - only uses fields that exist in minimal model
+Removed references to dropped fields
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import Optional
 
 from app.core.database import get_db
 from app.api.deps import get_current_user
 from app.models.profile import UserProfile
 from app.models.institution import Institution
+from app.schemas.profile import ProfileUpdate, ProfileResponse, ProfileSimple
 
 router = APIRouter()
-
-
-class ProfileUpdate(BaseModel):
-    """Simple update model - only state for now"""
-
-    state: Optional[str] = None
-    preferred_states: Optional[list[str]] = None
-
-
-class ProfileResponse(BaseModel):
-    """Simple response model"""
-
-    user_id: int
-    state: Optional[str] = None
-    preferred_states: Optional[list[str]] = None  # Add this
-    high_school_name: Optional[str] = None
-    graduation_year: Optional[int] = None
-    gpa: Optional[float] = None
-    intended_major: Optional[str] = None
-    academic_interests: Optional[list] = None
-
-    class Config:
-        from_attributes = True
 
 
 @router.get("/", response_model=ProfileResponse)
@@ -45,16 +26,11 @@ async def get_profile(
     )
 
     if not profile:
-        # Return empty profile structure
-        return ProfileResponse(
-            user_id=current_user["id"],
-            state=None,
-            high_school_name=None,
-            graduation_year=None,
-            gpa=None,
-            intended_major=None,
-            academic_interests=None,
-        )
+        # Create empty profile if doesn't exist
+        profile = UserProfile(user_id=current_user["id"])
+        db.add(profile)
+        db.commit()
+        db.refresh(profile)
 
     return profile
 
@@ -72,14 +48,13 @@ async def update_profile(
 
     # Create if doesn't exist
     if not profile:
-        profile = UserProfile(
-            user_id=current_user["id"], profile_tier="basic", profile_completed=False
-        )
+        profile = UserProfile(user_id=current_user["id"])
         db.add(profile)
 
-    # Update only provided fields
-    if profile_data.preferred_states is not None:
-        profile.preferred_states = profile_data.preferred_states
+    # Update fields (only if provided in request)
+    update_data = profile_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(profile, field, value)
 
     db.commit()
     db.refresh(profile)
@@ -91,36 +66,26 @@ async def update_profile(
 async def get_school_matches(
     current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    """Get school matches based on profile state and preferred states"""
+    """
+    Get school matches based on profile state
+    Simple matching: shows schools in user's state
+    """
 
     # Get profile
     profile = (
         db.query(UserProfile).filter(UserProfile.user_id == current_user["id"]).first()
     )
 
-    # Build list of states to match
-    states_to_match = []
-    if profile and profile.state:
-        states_to_match.append(profile.state)
-    if profile and profile.preferred_states:
-        states_to_match.extend(profile.preferred_states)
-
-    # Remove duplicates
-    states_to_match = list(set(states_to_match))
-
-    if not states_to_match:
+    if not profile or not profile.state:
         return {
             "matches": [],
             "total": 0,
-            "message": "Add your state preferences to see school matches",
+            "message": "Add your state to your profile to see school matches",
         }
 
-    # Get schools in selected states
+    # Get schools in user's state
     schools = (
-        db.query(Institution)
-        .filter(Institution.state.in_(states_to_match))
-        .limit(50)
-        .all()
+        db.query(Institution).filter(Institution.state == profile.state).limit(50).all()
     )
 
     # Format response
@@ -129,11 +94,18 @@ async def get_school_matches(
         matches.append(
             {
                 "id": school.id,
+                "ipeds_id": school.ipeds_id,
                 "name": school.name,
                 "city": school.city,
                 "state": school.state,
-                "match_score": 100,  # Simple: in preferred states = 100% match
+                "control_type": school.control_type.value,
+                "image_url": school.primary_image_url,
+                "match_score": 100,  # In user's state = 100% match
             }
         )
 
-    return {"matches": matches, "total": len(matches)}
+    return {
+        "matches": matches,
+        "total": len(matches),
+        "user_state": profile.state,
+    }

@@ -1,7 +1,8 @@
+# app/services/oauth.py - Simplified (Google + LinkedIn only)
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Dict, Any
 import secrets
 
@@ -11,15 +12,11 @@ from app.models.oauth import OAuthAccount
 
 
 class OAuthService:
-    """
-    Service for handling OAuth operations with Google, LinkedIn, and TikTok.
+    """OAuth service for Google and LinkedIn authentication"""
 
-    This service handles:
-    - Token exchange with OAuth providers
-    - User data retrieval from providers
-    - User account creation/linking
-    - Token refresh and management
-    """
+    # =========================================================================
+    # GOOGLE OAUTH
+    # =========================================================================
 
     async def handle_google_callback(
         self, code: str, db: AsyncSession
@@ -45,6 +42,39 @@ class OAuthService:
         )
 
         return {"user": user, "provider": "google"}
+
+    async def _exchange_google_code(self, code: str) -> Dict[str, Any]:
+        """Exchange Google authorization code for access token"""
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "client_id": settings.GOOGLE_CLIENT_ID,
+                    "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                    "code": code,
+                    "grant_type": "authorization_code",
+                    "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def _get_google_user_info(self, access_token: str) -> Dict[str, Any]:
+        """Get user information from Google"""
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://www.googleapis.com/oauth2/v2/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            response.raise_for_status()
+            return response.json()
+
+    # =========================================================================
+    # LINKEDIN OAUTH
+    # =========================================================================
 
     async def handle_linkedin_callback(
         self, code: str, db: AsyncSession
@@ -79,60 +109,6 @@ class OAuthService:
         )
 
         return {"user": user, "provider": "linkedin"}
-
-    async def handle_tiktok_callback(
-        self, code: str, db: AsyncSession
-    ) -> Dict[str, Any]:
-        """Handle TikTok OAuth callback and return user data"""
-
-        # Exchange authorization code for access token
-        token_data = await self._exchange_tiktok_code(code)
-
-        # Get user information from TikTok
-        user_info = await self._get_tiktok_user_info(token_data["access_token"])
-
-        # Find or create user account
-        user = await self._find_or_create_oauth_user(
-            provider="tiktok",
-            provider_user_id=user_info["data"]["user"]["open_id"],
-            email=None,  # TikTok doesn't always provide email
-            first_name=user_info["data"]["user"].get("display_name"),
-            last_name=None,
-            profile_data=user_info["data"]["user"],
-            token_data=token_data,
-            db=db,
-        )
-
-        return {"user": user, "provider": "tiktok"}
-
-    async def _exchange_google_code(self, code: str) -> Dict[str, Any]:
-        """Exchange Google authorization code for access token"""
-
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://oauth2.googleapis.com/token",
-                data={
-                    "client_id": settings.GOOGLE_CLIENT_ID,
-                    "client_secret": settings.GOOGLE_CLIENT_SECRET,
-                    "code": code,
-                    "grant_type": "authorization_code",
-                    "redirect_uri": settings.GOOGLE_REDIRECT_URI,
-                },
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-            )
-            response.raise_for_status()
-            return response.json()
-
-    async def _get_google_user_info(self, access_token: str) -> Dict[str, Any]:
-        """Get user information from Google"""
-
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                "https://www.googleapis.com/oauth2/v2/userinfo",
-                headers={"Authorization": f"Bearer {access_token}"},
-            )
-            response.raise_for_status()
-            return response.json()
 
     async def _exchange_linkedin_code(self, code: str) -> Dict[str, Any]:
         """Exchange LinkedIn authorization code for access token"""
@@ -174,38 +150,9 @@ class OAuthService:
             response.raise_for_status()
             return response.json()
 
-    async def _exchange_tiktok_code(self, code: str) -> Dict[str, Any]:
-        """Exchange TikTok authorization code for access token"""
-
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://open.tiktokapis.com/v2/oauth/token/",
-                data={
-                    "client_key": settings.TIKTOK_CLIENT_ID,
-                    "client_secret": settings.TIKTOK_CLIENT_SECRET,
-                    "code": code,
-                    "grant_type": "authorization_code",
-                    "redirect_uri": settings.TIKTOK_REDIRECT_URI,
-                },
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-            )
-            response.raise_for_status()
-            return response.json()
-
-    async def _get_tiktok_user_info(self, access_token: str) -> Dict[str, Any]:
-        """Get user information from TikTok"""
-
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://open.tiktokapis.com/v2/user/info/",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json",
-                },
-                json={"fields": ["open_id", "union_id", "avatar_url", "display_name"]},
-            )
-            response.raise_for_status()
-            return response.json()
+    # =========================================================================
+    # SHARED HELPER METHODS
+    # =========================================================================
 
     async def _find_or_create_oauth_user(
         self,

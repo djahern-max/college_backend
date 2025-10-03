@@ -2,19 +2,18 @@
 from app.models.user import User
 from app.models.profile import UserProfile
 from app.models.institution import Institution
-from app.models.institution_match import InstitutionMatch  # ADD THIS
-from app.models.scholarship import Scholarship, ScholarshipMatch
+
+from app.models.scholarship import Scholarship
 from app.models.tuition import TuitionData
 from app.models.oauth import OAuthAccount, OAuthState
-from app.models.essay import Essay
+
 
 __all__ = [
     "User",
     "UserProfile",
     "Institution",
-    "InstitutionMatch",  # ADD THIS
+    "InstitutionMatch",
     "Scholarship",
-    "ScholarshipMatch",
     "TuitionData",
     "OAuthAccount",
     "OAuthState",
