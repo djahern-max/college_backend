@@ -2,9 +2,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.api.v1 import user, oauth, scholarships, institution, tuition, profiles
+from app.api.v1 import user, oauth, scholarships, institution, tuition, profiles, costs
 from fastapi.routing import APIRoute
 from fastapi.responses import PlainTextResponse
+
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -33,6 +34,7 @@ app.include_router(
 )
 
 app.include_router(profiles.router, prefix="/api/v1/profiles", tags=["Profiles"])
+app.include_router(costs.router, prefix="/api/v1/costs", tags=["Costs"])
 
 
 @app.get("/")
