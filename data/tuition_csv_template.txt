@@ -1,0 +1,12 @@
+ipeds_id,academic_year,in_state_tuition,out_of_state_tuition,room_and_board,books_and_supplies,other_fees,total_cost_on_campus,total_cost_off_campus,notes
+100690,2024-2025,6372,20844,13980,1400,1584,33142,31262,"Alaska resident undergraduate off campus"
+100690,2025-2026,6372,20844,13980,1400,1584,33142,31262,"Alaska resident undergraduate off campus"
+100706,2024-2025,6500,22000,15000,1400,1600,34500,32000,"University of Alaska System estimated costs"
+100724,2024-2025,58348,58348,16272,1050,0,76670,60398,"Alaska Pacific University private institution"
+100751,2024-2025,9000,9000,7000,400,730,21855,14855,"Alaska Bible College annual costs"
+102049,2024-2025,16245,16245,0,0,0,16245,9307,"Alaska Career College Medical Assistant program 9.5 months, out-of-pocket after aid"
+102361,2024-2025,8900,8900,0,0,0,7443,7443,"Alaska Christian College median tuition with average net price after aid"
+102614,2024-2025,6500,22000,13980,1400,1584,31262,28902,"University of Alaska Anchorage estimated"
+103071,2024-2025,6500,22000,13980,1400,1584,31262,28902,"University of Alaska Fairbanks estimated per semester multiply by 2"
+103435,2021-2022,4920,4920,13000,800,360,21790,7274,"Ilisagvik College Fall 2021 Spring 2022 total annual"
+104151,2024-2025,14674,14674,0,0,0,14674,7274,"Alaska Vocational Technical Center Construction Trades Program"
