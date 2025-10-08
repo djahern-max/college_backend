@@ -183,3 +183,31 @@ async def get_institution_stats(db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get stats: {str(e)}",
         )
+
+
+@router.get("/ipeds/{ipeds_id}", response_model=InstitutionResponse)
+async def get_institution_by_ipeds(
+    ipeds_id: int,
+    db: Session = Depends(get_db),
+):
+    """Get a specific institution by IPEDS ID"""
+    try:
+        institution = (
+            db.query(Institution).filter(Institution.ipeds_id == ipeds_id).first()
+        )
+
+        if not institution:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Institution not found"
+            )
+
+        return InstitutionResponse.model_validate(institution)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting institution with IPEDS {ipeds_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get institution: {str(e)}",
+        )
