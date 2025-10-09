@@ -1,13 +1,17 @@
-# app/services/scholarship.py - UPDATED FOR SIMPLIFIED SCHEMA
+# app/services/scholarship.py - UPDATED FOR NEW SCHEMA
 """
-Scholarship service - updated to work with simplified schema (no boolean flags)
+Scholarship service - updated to work with new essential fields
 """
 
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, desc, asc
+from sqlalchemy import or_, desc, asc, and_
 from typing import List, Tuple, Optional
 from app.models.scholarship import Scholarship, ScholarshipStatus, ScholarshipType
-from app.schemas.scholarship import ScholarshipCreate, ScholarshipSearchFilter
+from app.schemas.scholarship import (
+    ScholarshipCreate,
+    ScholarshipSearchFilter,
+    ScholarshipUpdate,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -51,6 +55,28 @@ class ScholarshipService:
             logger.error(f"Error creating scholarship: {str(e)}")
             raise Exception(f"Failed to create scholarship: {str(e)}")
 
+    def update_scholarship(
+        self, scholarship_id: int, scholarship_data: ScholarshipUpdate
+    ) -> Optional[Scholarship]:
+        """Update an existing scholarship"""
+        try:
+            scholarship = self.get_scholarship_by_id(scholarship_id)
+            if not scholarship:
+                return None
+
+            # Update only provided fields
+            update_data = scholarship_data.model_dump(exclude_unset=True)
+            for field, value in update_data.items():
+                setattr(scholarship, field, value)
+
+            self.db.commit()
+            self.db.refresh(scholarship)
+            return scholarship
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error updating scholarship: {str(e)}")
+            raise Exception(f"Failed to update scholarship: {str(e)}")
+
     def increment_view_count(self, scholarship_id: int) -> bool:
         """Increment scholarship view count"""
         try:
@@ -69,8 +95,7 @@ class ScholarshipService:
         self, filters: ScholarshipSearchFilter
     ) -> Tuple[List[Scholarship], int]:
         """
-        Search scholarships with simplified filters
-        REMOVED: essay_required, interview_required filters (columns no longer exist)
+        Search scholarships with all available filters
         """
         try:
             query = self.db.query(Scholarship)
@@ -97,32 +122,75 @@ class ScholarshipService:
                         f"Invalid scholarship type: {filters.scholarship_type}"
                     )
 
-            # Text search (only searchable fields: title, organization)
+            # Text search (title, organization, description)
             if filters.search_query:
                 search_term = f"%{filters.search_query}%"
                 query = query.filter(
                     or_(
                         Scholarship.title.ilike(search_term),
                         Scholarship.organization.ilike(search_term),
+                        Scholarship.description.ilike(search_term),
                     )
                 )
 
-            # Financial filters
+            # Financial filters - check if award amount overlaps with filter range
             if filters.min_amount:
-                query = query.filter(Scholarship.amount_exact >= filters.min_amount)
+                # Scholarship max amount must be >= filter min
+                query = query.filter(Scholarship.amount_max >= filters.min_amount)
 
             if filters.max_amount:
-                query = query.filter(Scholarship.amount_exact <= filters.max_amount)
+                # Scholarship min amount must be <= filter max
+                query = query.filter(Scholarship.amount_min <= filters.max_amount)
 
-            # Renewable filter (this field still exists)
+            # Renewable filter
             if filters.renewable_only:
                 query = query.filter(Scholarship.is_renewable == True)
+
+            # GPA filter - show scholarships where user meets or exceeds requirement
+            if filters.min_gpa_filter:
+                # Show scholarships with no GPA requirement OR where user's GPA >= requirement
+                query = query.filter(
+                    or_(
+                        Scholarship.min_gpa == None,
+                        Scholarship.min_gpa <= filters.min_gpa_filter,
+                    )
+                )
+
+            # Date filters
+            if filters.deadline_before:
+                query = query.filter(
+                    and_(
+                        Scholarship.deadline != None,
+                        Scholarship.deadline <= filters.deadline_before,
+                    )
+                )
+
+            if filters.deadline_after:
+                query = query.filter(
+                    and_(
+                        Scholarship.deadline != None,
+                        Scholarship.deadline >= filters.deadline_after,
+                    )
+                )
+
+            # Academic year filter
+            if filters.academic_year:
+                query = query.filter(
+                    Scholarship.for_academic_year == filters.academic_year
+                )
 
             # Count total before pagination
             total = query.count()
 
             # Sorting
-            valid_sort_fields = ["created_at", "amount_exact", "title", "views_count"]
+            valid_sort_fields = [
+                "created_at",
+                "amount_min",
+                "amount_max",
+                "deadline",
+                "title",
+                "views_count",
+            ]
             sort_field = (
                 filters.sort_by
                 if filters.sort_by in valid_sort_fields
@@ -130,10 +198,18 @@ class ScholarshipService:
             )
 
             sort_column = getattr(Scholarship, sort_field, Scholarship.created_at)
-            if filters.sort_order == "desc":
-                query = query.order_by(desc(sort_column))
+
+            # Handle NULL values in deadline sorting by putting them last
+            if sort_field == "deadline":
+                if filters.sort_order == "desc":
+                    query = query.order_by(desc(sort_column.nullslast()))
+                else:
+                    query = query.order_by(asc(sort_column.nullslast()))
             else:
-                query = query.order_by(asc(sort_column))
+                if filters.sort_order == "desc":
+                    query = query.order_by(desc(sort_column))
+                else:
+                    query = query.order_by(asc(sort_column))
 
             # Pagination
             offset = (filters.page - 1) * filters.limit
@@ -159,3 +235,28 @@ class ScholarshipService:
             self.db.rollback()
             logger.error(f"Error deleting scholarship: {str(e)}")
             return False
+
+    def get_scholarships_by_deadline(
+        self, days_ahead: int = 30, limit: int = 50
+    ) -> List[Scholarship]:
+        """Get scholarships with upcoming deadlines"""
+        try:
+            from datetime import datetime, timedelta
+
+            today = datetime.now().date()
+            future_date = today + timedelta(days=days_ahead)
+
+            query = (
+                self.db.query(Scholarship)
+                .filter(Scholarship.status == ScholarshipStatus.ACTIVE)
+                .filter(Scholarship.deadline != None)
+                .filter(Scholarship.deadline >= today)
+                .filter(Scholarship.deadline <= future_date)
+                .order_by(asc(Scholarship.deadline))
+                .limit(limit)
+            )
+
+            return query.all()
+        except Exception as e:
+            logger.error(f"Error getting scholarships by deadline: {str(e)}")
+            raise Exception(f"Failed to get scholarships by deadline: {str(e)}")

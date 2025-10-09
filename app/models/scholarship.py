@@ -1,7 +1,7 @@
-# app/models/scholarship.py - TRULY SIMPLIFIED
+# app/models/scholarship.py - SIMPLIFIED WITH ESSENTIAL FIELDS
 """
-Simplified Scholarship model - removes excessive boolean flags
-Only keeps essential fields
+Simplified Scholarship model with essential fields only
+Focuses on practical information needed for scholarship search
 """
 
 from sqlalchemy import (
@@ -10,6 +10,8 @@ from sqlalchemy import (
     String,
     Boolean,
     DateTime,
+    Date,
+    Numeric,
     Enum as SQLEnum,
 )
 from sqlalchemy.sql import func
@@ -53,7 +55,7 @@ class DifficultyLevel(str, Enum):
 
 class Scholarship(Base):
     """
-    Simplified Scholarship model - removed boolean flags for easier maintenance
+    Simplified Scholarship model with essential practical fields
     """
 
     __tablename__ = "scholarships"
@@ -79,13 +81,34 @@ class Scholarship(Base):
     # ===========================
     # FINANCIAL INFO
     # ===========================
-    amount_exact = Column(Integer, nullable=False)
+    # Use amount_min/amount_max for ranges, or set them equal for exact amounts
+    amount_min = Column(Integer, nullable=False)  # Minimum award amount
+    amount_max = Column(Integer, nullable=False)  # Maximum award amount
     is_renewable = Column(Boolean, default=False, nullable=False)
+    number_of_awards = Column(Integer, nullable=True)  # How many scholarships available
+
+    # ===========================
+    # DATES
+    # ===========================
+    deadline = Column(Date, nullable=True, index=True)  # Application deadline
+    application_opens = Column(Date, nullable=True)  # When applications open
+    for_academic_year = Column(String(20), nullable=True)  # e.g., "2027-2028"
+
+    # ===========================
+    # DETAILS
+    # ===========================
+    description = Column(String(500), nullable=True)  # 2-3 sentences MAX
+    website_url = Column(String(500), nullable=True)
+
+    # ===========================
+    # REQUIREMENTS
+    # ===========================
+    min_gpa = Column(Numeric(3, 2), nullable=True)  # e.g., 3.50
 
     # ===========================
     # IMAGES
     # ===========================
-    primary_image_url = Column(String(500))
+    primary_image_url = Column(String(500), nullable=True)
 
     # ===========================
     # METADATA
@@ -102,4 +125,11 @@ class Scholarship(Base):
     updated_at = Column(DateTime, onupdate=func.now())
 
     def __repr__(self):
-        return f"<Scholarship {self.id}: {self.title}>"
+        return f"<Scholarship(id={self.id}, title='{self.title}', amount=${self.amount_min}-${self.amount_max})>"
+
+    @property
+    def amount_display(self) -> str:
+        """Return formatted amount string for display"""
+        if self.amount_min == self.amount_max:
+            return f"${self.amount_min:,}"
+        return f"${self.amount_min:,} - ${self.amount_max:,}"
