@@ -1,14 +1,13 @@
 """
-Alabama Schools Tuition Data Updater - Complete with All 12 Schools
-Run from: college-backend/scripts/
-Updates tuition_data table with current 2024-2025/2025-2026 academic year information
+Alabama Schools Tuition Data Updater - Docker/Production Version
+Run from container: docker exec -it magicscholar_api python scripts/update_alabama_tuition.py
 """
 
 import sys
 import os
 from pathlib import Path
 
-# Add parent directory to path so we can import from app
+# Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import psycopg2
@@ -16,38 +15,29 @@ from datetime import datetime
 from typing import Optional, Dict
 import json
 
-# Try to load environment variables
-try:
-    from dotenv import load_dotenv
-
-    env_path = Path(__file__).parent.parent / ".env"
-    load_dotenv(env_path)
-except ImportError:
-    print("⚠️  python-dotenv not installed, using environment variables as-is")
-
-# Database connection - will use localhost for local development
+# For Docker, use environment variables or fallback to docker-compose service names
 DB_CONFIG = {
-    "dbname": os.getenv("DB_NAME", "college_db"),
-    "user": os.getenv("DB_USER", "postgres"),
-    "password": os.getenv("DB_PASSWORD", ""),
-    "host": os.getenv("DB_HOST", "localhost"),
+    "dbname": os.getenv("DB_NAME", os.getenv("POSTGRES_DB", "magicscholar_db")),
+    "user": os.getenv("DB_USER", os.getenv("POSTGRES_USER", "postgres")),
+    "password": os.getenv("DB_PASSWORD", os.getenv("POSTGRES_PASSWORD", "")),
+    "host": os.getenv("DB_HOST", "db"),  # 'db' is the docker-compose service name
     "port": os.getenv("DB_PORT", "5432"),
 }
 
 print(
-    f"🔧 Database config: {DB_CONFIG['user']}@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['dbname']}"
+    f"🔧 Connecting to: {DB_CONFIG['user']}@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['dbname']}"
 )
 
 # Alabama schools with complete data
 ALABAMA_SCHOOLS = {
     "Alabama A & M University": {
-        "ipeds_id": None,  # Will be filled from DB
+        "ipeds_id": None,
         "data": {
             "academic_year": "2024-2025",
             "data_source": "institution_website",
-            "tuition_in_state": 10566.00,  # Annual tuition and fees
+            "tuition_in_state": 10566.00,
             "tuition_out_state": 19176.00,
-            "required_fees_in_state": None,  # Included in tuition
+            "required_fees_in_state": None,
             "required_fees_out_state": None,
             "tuition_fees_in_state": 10566.00,
             "tuition_fees_out_state": 19176.00,
@@ -57,7 +47,7 @@ ALABAMA_SCHOOLS = {
                 "note": "Annual room and board for 2024-2025",
                 "on_campus_total": 9465.00,
             },
-            "books_supplies": 1400.00,  # Standard estimate
+            "books_supplies": 1400.00,
             "personal_expenses": 3962.00,
             "transportation": None,
         },
@@ -69,7 +59,7 @@ ALABAMA_SCHOOLS = {
             "data_source": "institution_website",
             "tuition_in_state": 6659.00,
             "tuition_out_state": 18011.00,
-            "required_fees_in_state": None,  # Included in tuition
+            "required_fees_in_state": None,
             "required_fees_out_state": None,
             "tuition_fees_in_state": 6659.00,
             "tuition_fees_out_state": 18011.00,
@@ -114,8 +104,8 @@ ALABAMA_SCHOOLS = {
             "academic_year": "2024-2025",
             "data_source": "institution_website",
             "tuition_in_state": 12426.00,
-            "tuition_out_state": None,  # Not provided
-            "required_fees_in_state": None,  # Included in tuition
+            "tuition_out_state": None,
+            "required_fees_in_state": None,
             "required_fees_out_state": None,
             "tuition_fees_in_state": 12426.00,
             "tuition_fees_out_state": None,
@@ -132,13 +122,13 @@ ALABAMA_SCHOOLS = {
         "data": {
             "academic_year": "2025-2026",
             "data_source": "institution_website",
-            "tuition_in_state": 40760.00,  # Private university - same for all
+            "tuition_in_state": 40760.00,
             "tuition_out_state": 40760.00,
             "required_fees_in_state": 1150.00,
             "required_fees_out_state": 1150.00,
             "tuition_fees_in_state": 41910.00,
             "tuition_fees_out_state": 41910.00,
-            "room_board_on_campus": 14260.00,  # 7600 + 6660
+            "room_board_on_campus": 14260.00,
             "room_board_off_campus": None,
             "room_board_breakdown": {
                 "room_vail_smith": 7600.00,
@@ -157,11 +147,11 @@ ALABAMA_SCHOOLS = {
             "data_source": "institution_website",
             "tuition_in_state": 12180.00,
             "tuition_out_state": 34172.00,
-            "required_fees_in_state": None,  # Included in tuition
+            "required_fees_in_state": None,
             "required_fees_out_state": None,
             "tuition_fees_in_state": 12180.00,
             "tuition_fees_out_state": 34172.00,
-            "room_board_on_campus": 10134.00,  # 5900 housing + 4234 dining
+            "room_board_on_campus": 10134.00,
             "room_board_off_campus": None,
             "room_board_breakdown": {
                 "housing": 5900.00,
@@ -180,20 +170,20 @@ ALABAMA_SCHOOLS = {
             "academic_year": "2024-2025",
             "data_source": "institution_website",
             "tuition_in_state": 10176.00,
-            "tuition_out_state": None,  # Not provided
+            "tuition_out_state": None,
             "required_fees_in_state": None,
             "required_fees_out_state": None,
             "tuition_fees_in_state": 10176.00,
             "tuition_fees_out_state": None,
             "room_board_on_campus": 10068.00,
-            "room_board_off_campus": 5430.00,  # Living with parent
+            "room_board_off_campus": 5430.00,
             "room_board_breakdown": {
                 "on_campus": 10068.00,
                 "living_with_parent": 5430.00,
             },
             "books_supplies": 1000.00,
             "personal_expenses": None,
-            "transportation": 1000.00,  # On-campus
+            "transportation": 1000.00,
         },
     },
     "University of Alabama at Birmingham": {
@@ -203,11 +193,11 @@ ALABAMA_SCHOOLS = {
             "data_source": "institution_website",
             "tuition_in_state": 11640.00,
             "tuition_out_state": 28980.00,
-            "required_fees_in_state": None,  # Included in tuition
+            "required_fees_in_state": None,
             "required_fees_out_state": None,
             "tuition_fees_in_state": 11640.00,
             "tuition_fees_out_state": 28980.00,
-            "room_board_on_campus": 9955.00,  # Average of housing range + meal plan
+            "room_board_on_campus": 9955.00,
             "room_board_off_campus": None,
             "room_board_breakdown": {
                 "housing_min": 7180.00,
@@ -228,11 +218,11 @@ ALABAMA_SCHOOLS = {
             "data_source": "institution_website",
             "tuition_in_state": 11770.00,
             "tuition_out_state": 24662.00,
-            "required_fees_in_state": None,  # Included in tuition
+            "required_fees_in_state": None,
             "required_fees_out_state": None,
             "tuition_fees_in_state": 11770.00,
             "tuition_fees_out_state": 24662.00,
-            "room_board_on_campus": None,  # Not provided
+            "room_board_on_campus": None,
             "room_board_off_campus": None,
             "room_board_breakdown": None,
             "books_supplies": 2796.00,
@@ -246,12 +236,12 @@ ALABAMA_SCHOOLS = {
             "academic_year": "2024-2025",
             "data_source": "institution_website",
             "tuition_in_state": 12240.00,
-            "tuition_out_state": None,  # Not provided
+            "tuition_out_state": None,
             "required_fees_in_state": None,
             "required_fees_out_state": None,
             "tuition_fees_in_state": 12240.00,
             "tuition_fees_out_state": None,
-            "room_board_on_campus": None,  # Partial data only
+            "room_board_on_campus": None,
             "room_board_off_campus": None,
             "room_board_breakdown": {
                 "dining_per_term": 350.00,
@@ -270,11 +260,11 @@ ALABAMA_SCHOOLS = {
             "data_source": "institution_website",
             "tuition_in_state": 13460.00,
             "tuition_out_state": 27410.00,
-            "required_fees_in_state": None,  # Included in tuition
+            "required_fees_in_state": None,
             "required_fees_out_state": None,
             "tuition_fees_in_state": 13460.00,
             "tuition_fees_out_state": 27410.00,
-            "room_board_on_campus": None,  # Not provided
+            "room_board_on_campus": None,
             "room_board_off_campus": None,
             "room_board_breakdown": None,
             "books_supplies": 1400.00,
@@ -287,13 +277,13 @@ ALABAMA_SCHOOLS = {
         "data": {
             "academic_year": "2025-2026",
             "data_source": "institution_website",
-            "tuition_in_state": None,  # Only total provided
+            "tuition_in_state": None,
             "tuition_out_state": None,
             "required_fees_in_state": None,
             "required_fees_out_state": None,
-            "tuition_fees_in_state": 23072.00,  # Total with room & board
+            "tuition_fees_in_state": 23072.00,
             "tuition_fees_out_state": 36322.00,
-            "room_board_on_campus": None,  # Included in total
+            "room_board_on_campus": None,
             "room_board_off_campus": None,
             "room_board_breakdown": {
                 "note": "Total includes tuition, fees, room, and board but not broken down"
@@ -333,7 +323,6 @@ def get_ipeds_ids(conn):
 
 def calculate_derived_fields(data: Dict) -> Dict:
     """Calculate tuition_fees totals and data completeness"""
-    # Calculate tuition + fees if not already set
     if data.get("tuition_fees_in_state") is None:
         if data.get("tuition_in_state") and data.get("required_fees_in_state"):
             data["tuition_fees_in_state"] = (
@@ -350,7 +339,6 @@ def calculate_derived_fields(data: Dict) -> Dict:
         elif data.get("tuition_out_state"):
             data["tuition_fees_out_state"] = data["tuition_out_state"]
 
-    # Calculate booleans
     data["has_tuition_data"] = bool(
         data.get("tuition_in_state")
         or data.get("tuition_out_state")
@@ -363,7 +351,6 @@ def calculate_derived_fields(data: Dict) -> Dict:
         data.get("room_board_on_campus") or data.get("books_supplies")
     )
 
-    # Calculate completeness score (0-100)
     fields_to_check = [
         "tuition_fees_in_state",
         "tuition_fees_out_state",
@@ -373,7 +360,6 @@ def calculate_derived_fields(data: Dict) -> Dict:
     filled_fields = sum(1 for field in fields_to_check if data.get(field) is not None)
     data["data_completeness_score"] = int((filled_fields / len(fields_to_check)) * 100)
 
-    # Use VALIDATED since data is manually verified from institution websites
     data["validation_status"] = "VALIDATED"
 
     return data
@@ -383,17 +369,13 @@ def insert_or_update_tuition_data(conn, school_name: str, ipeds_id: int, data: D
     """Insert or update tuition data for a school"""
     cursor = conn.cursor()
 
-    # Calculate derived fields
     data = calculate_derived_fields(data)
-
-    # Convert room_board_breakdown to JSON if it exists
     room_board_json = (
         json.dumps(data.get("room_board_breakdown"))
         if data.get("room_board_breakdown")
         else None
     )
 
-    # Check if record exists
     cursor.execute(
         """
         SELECT id FROM tuition_data 
@@ -405,7 +387,6 @@ def insert_or_update_tuition_data(conn, school_name: str, ipeds_id: int, data: D
     existing = cursor.fetchone()
 
     if existing:
-        # Update existing record
         cursor.execute(
             """
             UPDATE tuition_data SET
@@ -454,7 +435,6 @@ def insert_or_update_tuition_data(conn, school_name: str, ipeds_id: int, data: D
             f"✅ Updated: {school_name} (Completeness: {data['data_completeness_score']}%)"
         )
     else:
-        # Insert new record
         cursor.execute(
             """
             INSERT INTO tuition_data (
@@ -515,11 +495,9 @@ def main():
         conn = psycopg2.connect(**DB_CONFIG)
         print("🔌 Connected to database\n")
 
-        # Get IPEDS IDs
         ipeds_map = get_ipeds_ids(conn)
         print(f"📚 Found {len(ipeds_map)} Alabama schools in database\n")
 
-        # Update all schools
         updated_count = 0
         missing_ipeds = []
 
@@ -544,7 +522,6 @@ def main():
                 print(f"   - {school}")
             print()
 
-        # Show summary statistics
         cursor = conn.cursor()
         cursor.execute(
             """
