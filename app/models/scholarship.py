@@ -1,7 +1,7 @@
-# app/models/scholarship.py - SIMPLIFIED VERSION
+# app/models/scholarship.py - TRULY SIMPLIFIED
 """
-Streamlined Scholarship model - removed 47 unused fields (62% reduction)
-Only includes fields that are actually being used in production
+Simplified Scholarship model - removes excessive boolean flags
+Only keeps essential fields
 """
 
 from sqlalchemy import (
@@ -18,24 +18,18 @@ from enum import Enum
 
 
 class ScholarshipType(str, Enum):
-    """Types of scholarships available"""
+    """Types of scholarships - matches UI filter categories"""
 
-    ACADEMIC_MERIT = "academic_merit"
-    NEED_BASED = "need_based"
-    ATHLETIC = "athletic"
-    STEM = "stem"
-    ARTS = "arts"
-    DIVERSITY = "diversity"
-    FIRST_GENERATION = "first_generation"
-    COMMUNITY_SERVICE = "community_service"
-    LEADERSHIP = "leadership"
-    LOCAL_COMMUNITY = "local_community"
-    EMPLOYER_SPONSORED = "employer_sponsored"
-    MILITARY = "military"
-    RELIGIOUS = "religious"
-    CAREER_SPECIFIC = "career_specific"
-    ESSAY_BASED = "essay_based"
-    RENEWABLE = "renewable"
+    ACADEMIC_MERIT = "academic_merit"  # 🎓 GPA/grades based
+    NEED_BASED = "need_based"  # 💵 Income/financial need
+    STEM = "stem"  # 🔬 Science, tech, engineering, math
+    ARTS = "arts"  # 🎨 Creative fields
+    DIVERSITY = "diversity"  # 🌈 Underrepresented groups
+    ATHLETIC = "athletic"  # ⚽ Sports scholarships
+    LEADERSHIP = "leadership"  # 👥 Leadership/community service
+    MILITARY = "military"  # 🎖️ Military families
+    CAREER_SPECIFIC = "career_specific"  # 💼 Specific career fields
+    OTHER = "other"  # Anything else
 
 
 class ScholarshipStatus(str, Enum):
@@ -59,8 +53,7 @@ class DifficultyLevel(str, Enum):
 
 class Scholarship(Base):
     """
-    Simplified Scholarship model - only fields with actual data
-    Removed 47 unused fields for better performance and maintainability
+    Simplified Scholarship model - removed boolean flags for easier maintenance
     """
 
     __tablename__ = "scholarships"
@@ -90,40 +83,12 @@ class Scholarship(Base):
     is_renewable = Column(Boolean, default=False, nullable=False)
 
     # ===========================
-    # ELIGIBILITY FLAGS
+    # IMAGES
     # ===========================
-    need_based_required = Column(Boolean, default=False, nullable=False)
-    international_students_eligible = Column(Boolean, default=False, nullable=False)
-    leadership_required = Column(Boolean, default=False, nullable=False)
-    work_experience_required = Column(Boolean, default=False, nullable=False)
-    military_affiliation_required = Column(Boolean, default=False, nullable=False)
+    primary_image_url = Column(String(500))
 
     # ===========================
-    # APPLICATION REQUIREMENTS
-    # ===========================
-    essay_required = Column(Boolean, default=False, nullable=False)
-    transcript_required = Column(Boolean, default=True, nullable=False)
-    recommendation_letters_required = Column(Integer, default=0, nullable=False)
-    portfolio_required = Column(Boolean, default=False, nullable=False)
-    interview_required = Column(Boolean, default=False, nullable=False)
-
-    # Essay type flags
-    personal_statement_required = Column(Boolean, default=False, nullable=False)
-    leadership_essay_required = Column(Boolean, default=False, nullable=False)
-    community_service_essay_required = Column(Boolean, default=False, nullable=False)
-
-    # ===========================
-    # DEADLINE INFO
-    # ===========================
-    is_rolling_deadline = Column(Boolean, default=False, nullable=False)
-
-    # ===========================
-    # DISPLAY & BRANDING
-    # ===========================
-    primary_image_url = Column(String(500), nullable=True)
-
-    # ===========================
-    # ADMIN & METRICS
+    # METADATA
     # ===========================
     verified = Column(Boolean, default=False, nullable=False)
     featured = Column(Boolean, default=False, nullable=False)
@@ -133,10 +98,8 @@ class Scholarship(Base):
     # ===========================
     # TIMESTAMPS
     # ===========================
-    created_at = Column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(DateTime, onupdate=func.now())
 
     def __repr__(self):
-        return f"<Scholarship(id={self.id}, title='{self.title}', amount=${self.amount_exact})>"
+        return f"<Scholarship {self.id}: {self.title}>"

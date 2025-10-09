@@ -1,7 +1,7 @@
-# app/schemas/scholarship.py - SIMPLIFIED VERSION
+# app/schemas/scholarship.py - TRULY SIMPLIFIED
 """
-Streamlined scholarship schemas matching the simplified model
-Removed all fields that had 0% usage (47 fields removed)
+Simplified scholarship schemas - removed excessive boolean flags
+These are PYDANTIC models for API validation, not SQLAlchemy models
 """
 
 from pydantic import BaseModel, Field, validator
@@ -11,22 +11,18 @@ from enum import Enum
 
 
 class ScholarshipType(str, Enum):
+    """Types of scholarships - matches UI filter categories"""
+
     ACADEMIC_MERIT = "academic_merit"
     NEED_BASED = "need_based"
-    ATHLETIC = "athletic"
     STEM = "stem"
     ARTS = "arts"
     DIVERSITY = "diversity"
-    FIRST_GENERATION = "first_generation"
-    COMMUNITY_SERVICE = "community_service"
+    ATHLETIC = "athletic"
     LEADERSHIP = "leadership"
-    LOCAL_COMMUNITY = "local_community"
-    EMPLOYER_SPONSORED = "employer_sponsored"
     MILITARY = "military"
-    RELIGIOUS = "religious"
     CAREER_SPECIFIC = "career_specific"
-    ESSAY_BASED = "essay_based"
-    RENEWABLE = "renewable"
+    OTHER = "other"
 
 
 class ScholarshipStatus(str, Enum):
@@ -50,7 +46,7 @@ class DifficultyLevel(str, Enum):
 
 
 class ScholarshipBase(BaseModel):
-    """Base schema with only fields that are actually used"""
+    """Base schema - simplified without boolean flags"""
 
     title: str = Field(..., min_length=1, max_length=255)
     organization: str = Field(..., min_length=1, max_length=255)
@@ -60,28 +56,6 @@ class ScholarshipBase(BaseModel):
     # Financial
     amount_exact: int = Field(..., ge=0)
     is_renewable: bool = False
-
-    # Eligibility flags
-    need_based_required: bool = False
-    international_students_eligible: bool = False
-    leadership_required: bool = False
-    work_experience_required: bool = False
-    military_affiliation_required: bool = False
-
-    # Application requirements
-    essay_required: bool = False
-    transcript_required: bool = True
-    recommendation_letters_required: int = Field(0, ge=0, le=10)
-    portfolio_required: bool = False
-    interview_required: bool = False
-
-    # Essay requirements
-    personal_statement_required: bool = False
-    leadership_essay_required: bool = False
-    community_service_essay_required: bool = False
-
-    # Deadline
-    is_rolling_deadline: bool = False
 
     # Display
     primary_image_url: Optional[str] = Field(None, max_length=500)
@@ -115,23 +89,6 @@ class ScholarshipUpdate(BaseModel):
     amount_exact: Optional[int] = Field(None, ge=0)
     is_renewable: Optional[bool] = None
 
-    need_based_required: Optional[bool] = None
-    international_students_eligible: Optional[bool] = None
-    leadership_required: Optional[bool] = None
-    work_experience_required: Optional[bool] = None
-    military_affiliation_required: Optional[bool] = None
-
-    essay_required: Optional[bool] = None
-    transcript_required: Optional[bool] = None
-    recommendation_letters_required: Optional[int] = Field(None, ge=0, le=10)
-    portfolio_required: Optional[bool] = None
-    interview_required: Optional[bool] = None
-
-    personal_statement_required: Optional[bool] = None
-    leadership_essay_required: Optional[bool] = None
-    community_service_essay_required: Optional[bool] = None
-
-    is_rolling_deadline: Optional[bool] = None
     primary_image_url: Optional[str] = Field(None, max_length=500)
 
     verified: Optional[bool] = None
@@ -165,7 +122,7 @@ class ScholarshipResponse(ScholarshipBase):
 
 
 class ScholarshipSearchFilter(BaseModel):
-    """Simplified search filters - only for fields that exist"""
+    """Simplified search filters"""
 
     page: int = Field(1, ge=1)
     limit: int = Field(20, ge=1, le=100)
@@ -183,9 +140,7 @@ class ScholarshipSearchFilter(BaseModel):
     min_amount: Optional[int] = Field(None, ge=0)
     max_amount: Optional[int] = Field(None, ge=0)
 
-    # Requirement filters
-    requires_essay: Optional[bool] = None
-    requires_interview: Optional[bool] = None
+    # Simple filters
     renewable_only: Optional[bool] = None
 
     # Sorting

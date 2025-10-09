@@ -1,7 +1,6 @@
-# app/api/v1/scholarships.py - CLEANED UP
+# app/api/v1/scholarships.py - UPDATED FOR SIMPLIFIED SCHEMA
 """
-Simplified scholarships API - only uses fields that exist in the model
-Removed all references to dropped fields
+Simplified scholarships API - removed filters for deleted columns
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -78,9 +77,8 @@ async def search_scholarships(
     search_query: Optional[str] = None,
     min_amount: Optional[int] = Query(None, ge=0),
     max_amount: Optional[int] = Query(None, ge=0),
-    requires_essay: Optional[bool] = None,
-    requires_interview: Optional[bool] = None,
-    renewable_only: Optional[bool] = None,
+    renewable_only: Optional[bool] = None,  # KEPT - this field still exists
+    # REMOVED: requires_essay, requires_interview - columns deleted
     sort_by: str = Query(
         "created_at", pattern="^(created_at|amount_exact|title|views_count)$"
     ),
@@ -89,7 +87,7 @@ async def search_scholarships(
 ):
     """
     Search and filter scholarships
-    Only uses fields that exist in the simplified model
+    Updated for simplified schema without boolean flags
     """
     try:
         # Build search filter (only with fields that exist)
@@ -103,8 +101,6 @@ async def search_scholarships(
             search_query=search_query,
             min_amount=min_amount,
             max_amount=max_amount,
-            requires_essay=requires_essay,
-            requires_interview=requires_interview,
             renewable_only=renewable_only,
             sort_by=sort_by,
             sort_order=sort_order,
@@ -118,23 +114,24 @@ async def search_scholarships(
         has_next = page < total_pages
         has_prev = page > 1
 
+        # Convert to response models
+        scholarship_responses = [
+            ScholarshipResponse.model_validate(scholarship)
+            for scholarship in scholarships
+        ]
+
         return {
-            "scholarships": [
-                ScholarshipResponse.model_validate(s) for s in scholarships
-            ],
-            "pagination": {
-                "current_page": page,
-                "total_pages": total_pages,
-                "total_items": total,
-                "items_per_page": limit,
-                "has_next": has_next,
-                "has_previous": has_prev,
-            },
-            "filters_applied": filters.model_dump(exclude_none=True),
+            "scholarships": scholarship_responses,
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "total_pages": total_pages,
+            "has_next": has_next,
+            "has_prev": has_prev,
         }
 
     except Exception as e:
-        logger.error(f"Search error: {str(e)}")
+        logger.error(f"Error searching scholarships: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to search scholarships: {str(e)}",
@@ -146,14 +143,15 @@ async def get_scholarship(
     scholarship_id: int,
     db: Session = Depends(get_db),
 ):
-    """Get a specific scholarship by ID"""
+    """Get a single scholarship by ID"""
     try:
         service = ScholarshipService(db)
         scholarship = service.get_scholarship_by_id(scholarship_id)
 
         if not scholarship:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship not found"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Scholarship with id {scholarship_id} not found",
             )
 
         # Increment view count
@@ -179,12 +177,15 @@ async def delete_scholarship(
     """Delete a scholarship (Admin only)"""
     try:
         service = ScholarshipService(db)
-        deleted = service.delete_scholarship(scholarship_id)
+        success = service.delete_scholarship(scholarship_id)
 
-        if not deleted:
+        if not success:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship not found"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Scholarship with id {scholarship_id} not found",
             )
+
+        return None
 
     except HTTPException:
         raise
@@ -192,49 +193,4 @@ async def delete_scholarship(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete scholarship: {str(e)}",
-        )
-
-
-@router.post("/bulk/create", response_model=dict)
-async def bulk_create_scholarships(
-    bulk_data: BulkScholarshipCreate,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Bulk create scholarships (Admin only)"""
-    try:
-        service = ScholarshipService(db)
-        created_scholarships, errors = service.bulk_create_scholarships(
-            bulk_data.scholarships
-        )
-
-        return {
-            "message": "Bulk creation completed",
-            "created_count": len(created_scholarships),
-            "error_count": len(errors),
-            "created_scholarships": [
-                ScholarshipResponse.model_validate(s) for s in created_scholarships
-            ],
-            "errors": errors,
-        }
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Bulk creation failed: {str(e)}",
-        )
-
-
-@router.get("/stats/summary", response_model=dict)
-async def get_scholarship_stats(db: Session = Depends(get_db)):
-    """Get scholarship statistics"""
-    try:
-        service = ScholarshipService(db)
-        stats = service.get_scholarship_stats()
-        return stats
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get stats: {str(e)}",
         )
