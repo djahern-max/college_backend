@@ -51,12 +51,13 @@ class ScholarshipImageUploader:
 
         # Mapping of image filenames to scholarship titles
         self.image_mappings = {
-            "cocacola.jpg": "Coca-Cola Scholars Program",
-            "GoogleScholarship.jpg": "Google Lime Scholarship",
-            "pellGrant.jpg": "Pell Grant",
-            "elksScholarship.webp": "Elks National Foundation Most Valuable Student",
-            "NationalMeritScholarship.webp": "National Merit Scholarship",
-            "uncf.jpg": "UNCF General Scholarship",
+            "coca-cola-scholars.png": "Coca-Cola Scholars Program",
+            # Add more mappings as you get more images
+            # "GoogleScholarship.jpg": "Google Lime Scholarship",
+            # "pellGrant.jpg": "Pell Grant",
+            # "elksScholarship.webp": "Elks National Foundation Most Valuable Student",
+            # "NationalMeritScholarship.webp": "National Merit Scholarship",
+            # "uncf.jpg": "UNCF General Scholarship",
         }
 
     def sanitize_filename(self, name):
@@ -95,6 +96,13 @@ class ScholarshipImageUploader:
             # Optimize image first
             optimized_path = self.optimize_image(local_path)
 
+            # First, delete the old file if it exists to clear CDN cache
+            try:
+                self.s3_client.delete_object(Bucket=self.bucket_name, Key=s3_key)
+                print(f"  ✓ Deleted old file: {s3_key}")
+            except Exception as e:
+                print(f"  ℹ No existing file to delete: {s3_key}")
+
             with open(optimized_path, "rb") as file:
                 self.s3_client.upload_fileobj(
                     file,
@@ -103,7 +111,8 @@ class ScholarshipImageUploader:
                     ExtraArgs={
                         "ACL": "public-read",
                         "ContentType": "image/jpeg",
-                        "CacheControl": "max-age=31536000",
+                        "CacheControl": "public, max-age=31536000, immutable",
+                        "Metadata": {"cache-control": "no-cache"},
                     },
                 )
 
@@ -112,6 +121,7 @@ class ScholarshipImageUploader:
 
             cdn_url = f"{self.cdn_base_url}/{s3_key}"
             print(f"  ✓ Uploaded: {s3_key}")
+            print(f"  ℹ Note: CDN cache may take a few minutes to update")
             return cdn_url
 
         except Exception as e:
@@ -167,8 +177,12 @@ class ScholarshipImageUploader:
                 continue
 
             # Create S3 key with scholarships folder structure
+            # Add version number to force new URL and bypass CDN cache
+            import time
+
+            timestamp = int(time.time())
             safe_name = self.sanitize_filename(scholarship["title"])
-            s3_key = f"scholarships/{safe_name}.jpg"
+            s3_key = f"scholarships/{safe_name}_v{timestamp}.jpg"
 
             # Upload to Spaces
             cdn_url = self.upload_to_spaces(image_path, s3_key)
