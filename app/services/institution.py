@@ -6,7 +6,7 @@ Removed references to dropped fields (customer_rank, image_quality, etc.)
 
 from typing import Optional, List, Tuple, Dict
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_, and_, desc
+from sqlalchemy import func, or_, and_, desc, case
 from sqlalchemy.exc import SQLAlchemyError
 import logging
 
@@ -86,12 +86,23 @@ class InstitutionService:
             # Count total
             total = query.count()
 
-            # Sorting
+            # Sorting with state priority
+            # Priority: AL, AR, then AK, then rest alphabetically
             sort_column = getattr(Institution, filters.sort_by, Institution.name)
+
+            # Create a CASE statement for state priority
+            state_priority = case(
+                (Institution.state == "AL", 1),
+                (Institution.state == "AR", 2),
+                (Institution.state == "AK", 3),
+                else_=4,
+            )
+
+            # Apply sorting: first by state priority, then by the requested sort column
             if filters.sort_order == "desc":
-                query = query.order_by(desc(sort_column))
+                query = query.order_by(state_priority, desc(sort_column))
             else:
-                query = query.order_by(sort_column)
+                query = query.order_by(state_priority, sort_column)
 
             # Pagination
             offset = (filters.page - 1) * filters.limit
