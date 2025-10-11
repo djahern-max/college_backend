@@ -4,7 +4,7 @@ Scholarship service - updated to work with new essential fields
 """
 
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, desc, asc, and_
+from sqlalchemy import or_, desc, asc, and_, case
 from typing import List, Tuple, Optional
 from app.models.scholarship import Scholarship, ScholarshipStatus, ScholarshipType
 from app.schemas.scholarship import (
@@ -182,7 +182,24 @@ class ScholarshipService:
             # Count total before pagination
             total = query.count()
 
-            # Sorting
+            # Priority sorting - specific scholarships first
+            priority_order = case(
+                (Scholarship.title.ilike("%Lowe%Educational%"), 1),
+                (Scholarship.title.ilike("%Target%Community%"), 2),
+                (Scholarship.title.ilike("%Google%Lime%"), 3),
+                (Scholarship.title.ilike("%Coca%Cola%"), 4),
+                (Scholarship.title.ilike("%Violet%Richardson%"), 5),
+                (Scholarship.title.ilike("%National%Merit%"), 6),
+                (Scholarship.title.ilike("%Do%Something%"), 7),
+                # Then other scholarships with images
+                (Scholarship.primary_image_url.isnot(None), 8),
+                # Finally scholarships without images
+                else_=9,
+            )
+
+            query = query.order_by(asc(priority_order))
+
+            # Then apply user's requested sorting
             valid_sort_fields = [
                 "created_at",
                 "amount_min",
@@ -246,12 +263,26 @@ class ScholarshipService:
             today = datetime.now().date()
             future_date = today + timedelta(days=days_ahead)
 
+            # Priority order for featured scholarships
+            priority_order = case(
+                (Scholarship.title.ilike("%Lowe%Educational%"), 1),
+                (Scholarship.title.ilike("%Target%Community%"), 2),
+                (Scholarship.title.ilike("%Google%Lime%"), 3),
+                (Scholarship.title.ilike("%Coca%Cola%"), 4),
+                (Scholarship.title.ilike("%Violet%Richardson%"), 5),
+                (Scholarship.title.ilike("%National%Merit%"), 6),
+                (Scholarship.title.ilike("%Do%Something%"), 7),
+                (Scholarship.primary_image_url.isnot(None), 8),
+                else_=9,
+            )
+
             query = (
                 self.db.query(Scholarship)
                 .filter(Scholarship.status == ScholarshipStatus.ACTIVE)
                 .filter(Scholarship.deadline != None)
                 .filter(Scholarship.deadline >= today)
                 .filter(Scholarship.deadline <= future_date)
+                .order_by(asc(priority_order))
                 .order_by(asc(Scholarship.deadline))
                 .limit(limit)
             )
