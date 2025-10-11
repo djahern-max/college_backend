@@ -1,7 +1,15 @@
 # scripts/upload_scholarship_images.py
 """
-Updated script to upload scholarship images to Digital Ocean Spaces
-Uses the comprehensive mapping file for all 126 scholarships
+Script to upload scholarship images to Digital Ocean Spaces
+and update the database with CDN URLs.
+
+This script:
+1. Reads images from the manual_images directory
+2. Uploads them to Digital Ocean Spaces under scholarships/ folder
+3. Updates the scholarships table with CDN URLs
+
+Usage:
+    python scripts/upload_scholarship_images.py
 """
 
 import os
@@ -13,19 +21,14 @@ from PIL import Image
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 
-# Import the mappings
-from scholarship_image_mappings import (
-    ALL_MAPPINGS,
-    get_priority_mappings,
-    PRIORITY_SCHOLARSHIPS,
-)
-
+# Add parent directory to path to import app modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 load_dotenv()
 
 
 class ScholarshipImageUploader:
-    def __init__(self, priority_only=False):
+    def __init__(self):
         # Digital Ocean Spaces configuration
         self.s3_client = boto3.client(
             "s3",
@@ -46,11 +49,20 @@ class ScholarshipImageUploader:
         self.project_root = Path(__file__).parent.parent
         self.manual_images_dir = self.project_root / "manual_images"
 
-        # Use priority mappings if specified
-        self.image_mappings = get_priority_mappings() if priority_only else ALL_MAPPINGS
+        # Mapping of image filenames to scholarship titles
+        self.image_mappings = {
+            "coca-cola-scholars.png": "Coca-Cola Scholars Program",
+            # Add more mappings as you get more images
+            # "GoogleScholarship.jpg": "Google Lime Scholarship",
+            # "pellGrant.jpg": "Pell Grant",
+            # "elksScholarship.webp": "Elks National Foundation Most Valuable Student",
+            # "NationalMeritScholarship.webp": "National Merit Scholarship",
+            # "uncf.jpg": "UNCF General Scholarship",
+        }
 
     def sanitize_filename(self, name):
         """Convert scholarship name to safe filename format"""
+        # Remove special characters and replace spaces with underscores
         safe_name = re.sub(r"[^\w\s-]", "", name)
         safe_name = re.sub(r"[-\s]+", "_", safe_name)
         return safe_name.lower().strip("_")
@@ -58,6 +70,7 @@ class ScholarshipImageUploader:
     def optimize_image(self, image_path, max_width=800):
         """Optimize image for web with proper quality"""
         with Image.open(image_path) as img:
+            # Convert RGBA to RGB if necessary
             if img.mode == "RGBA":
                 bg = Image.new("RGB", img.size, (255, 255, 255))
                 bg.paste(img, mask=img.split()[3])
@@ -65,25 +78,30 @@ class ScholarshipImageUploader:
             elif img.mode != "RGB":
                 img = img.convert("RGB")
 
+            # Resize if too large
             if img.width > max_width:
                 ratio = max_width / img.width
                 new_height = int(img.height * ratio)
                 img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
 
+            # Save optimized to temporary file
             temp_path = image_path.parent / f"temp_{image_path.stem}.jpg"
             img.save(temp_path, "JPEG", quality=85, optimize=True)
+
             return temp_path
 
     def upload_to_spaces(self, local_path, s3_key):
         """Upload file to Digital Ocean Spaces"""
         try:
+            # Optimize image first
             optimized_path = self.optimize_image(local_path)
 
+            # First, delete the old file if it exists to clear CDN cache
             try:
                 self.s3_client.delete_object(Bucket=self.bucket_name, Key=s3_key)
                 print(f"  ✓ Deleted old file: {s3_key}")
-            except:
-                pass
+            except Exception as e:
+                print(f"  ℹ No existing file to delete: {s3_key}")
 
             with open(optimized_path, "rb") as file:
                 self.s3_client.upload_fileobj(
@@ -94,12 +112,16 @@ class ScholarshipImageUploader:
                         "ACL": "public-read",
                         "ContentType": "image/jpeg",
                         "CacheControl": "public, max-age=31536000, immutable",
+                        "Metadata": {"cache-control": "no-cache"},
                     },
                 )
 
+            # Clean up temp file
             optimized_path.unlink()
+
             cdn_url = f"{self.cdn_base_url}/{s3_key}"
-            print(f"  ✓ Uploaded: {cdn_url}")
+            print(f"  ✓ Uploaded: {s3_key}")
+            print(f"  ℹ Note: CDN cache may take a few minutes to update")
             return cdn_url
 
         except Exception as e:
@@ -107,7 +129,7 @@ class ScholarshipImageUploader:
             return None
 
     def get_scholarship_by_title(self, title):
-        """Get scholarship from database by title"""
+        """Get scholarship ID from database by title"""
         with self.engine.connect() as conn:
             query = text(
                 """
@@ -123,66 +145,50 @@ class ScholarshipImageUploader:
                 return {"id": row[0], "title": row[1]}
         return None
 
-    def find_image_file(self, base_filename):
-        """Find image file with any extension"""
-        extensions = [".jpg", ".jpeg", ".png", ".webp", ".gif"]
-        base_path = self.manual_images_dir / base_filename
-
-        # Try exact match first
-        if base_path.exists():
-            return base_path
-
-        # Try different extensions
-        for ext in extensions:
-            test_path = base_path.with_suffix(ext)
-            if test_path.exists():
-                return test_path
-
-        return None
-
     def process_images(self):
-        """Process all scholarship images"""
+        """Process all scholarship images in manual_images directory"""
         if not self.manual_images_dir.exists():
             print(f"Error: Directory {self.manual_images_dir} not found")
             return
 
-        print(f"\nProcessing scholarship images from {self.manual_images_dir}")
-        print(f"Scholarships to process: {len(self.image_mappings)}\n")
+        print(f"\nProcessing scholarship images from {self.manual_images_dir}\n")
 
         uploaded_count = 0
         updated_count = 0
         skipped_count = 0
 
-        for filename_base, scholarship_title in self.image_mappings.items():
-            # Remove extension from filename to search for any format
-            base_name = Path(filename_base).stem
-            image_path = self.find_image_file(base_name)
+        for filename, scholarship_title in self.image_mappings.items():
+            image_path = self.manual_images_dir / filename
 
-            if not image_path:
-                print(f"⊘ Image not found: {filename_base} (tried multiple formats)")
+            if not image_path.exists():
+                print(f"✗ Image not found: {filename}")
                 skipped_count += 1
                 continue
 
-            print(f"\n{'='*60}")
-            print(f"Processing: {image_path.name}")
+            print(f"\nProcessing: {filename}")
             print(f"  → Scholarship: {scholarship_title}")
 
+            # Get scholarship from database
             scholarship = self.get_scholarship_by_title(scholarship_title)
 
             if not scholarship:
-                print(f"  ✗ Scholarship not found in database")
+                print(f"  ✗ Scholarship not found in database: {scholarship_title}")
                 skipped_count += 1
                 continue
 
+            # Create S3 key with scholarships folder structure
+            # Add version number to force new URL and bypass CDN cache
             import time
 
             timestamp = int(time.time())
             safe_name = self.sanitize_filename(scholarship["title"])
             s3_key = f"scholarships/{safe_name}_v{timestamp}.jpg"
 
+            # Upload to Spaces
             cdn_url = self.upload_to_spaces(image_path, s3_key)
 
             if cdn_url:
+                # Update database
                 with self.engine.connect() as conn:
                     update_query = text(
                         """
@@ -197,7 +203,8 @@ class ScholarshipImageUploader:
                     )
                     conn.commit()
 
-                print(f"  ✓ Database updated")
+                print(f"  ✓ Database updated with CDN URL")
+                print(f"  ✓ URL: {cdn_url}")
                 uploaded_count += 1
                 updated_count += 1
 
@@ -206,71 +213,32 @@ class ScholarshipImageUploader:
         print(f"  Images uploaded: {uploaded_count}")
         print(f"  Database records updated: {updated_count}")
         print(f"  Skipped: {skipped_count}")
-        print(f"  Total in mapping: {len(self.image_mappings)}")
         print(f"{'='*60}\n")
 
-    def list_scholarships(self, show_images=False):
-        """List scholarships with image status"""
+    def list_scholarships(self):
+        """List all scholarships in the database"""
         with self.engine.connect() as conn:
             query = text(
                 """
-                SELECT id, title, organization, primary_image_url, featured
+                SELECT id, title, organization, primary_image_url
                 FROM scholarships
-                ORDER BY 
-                    CASE WHEN featured THEN 0 ELSE 1 END,
-                    title
+                ORDER BY title
             """
             )
             result = conn.execute(query)
             rows = result.fetchall()
 
-            has_image = sum(1 for row in rows if row[3])
-            no_image = len(rows) - has_image
-
-            print(f"\nScholarship Image Status:")
-            print(f"{'='*80}")
-            print(
-                f"Total: {len(rows)} | With Images: {has_image} | Missing: {no_image}\n"
-            )
-
-            if show_images:
-                print("FEATURED SCHOLARSHIPS:")
-                print("-" * 80)
-                for row in rows:
-                    if row[4]:  # featured
-                        status = "✓ Has image" if row[3] else "✗ MISSING"
-                        priority = "⭐" if row[1] in PRIORITY_SCHOLARSHIPS else "  "
-                        print(f"{priority} {status}: {row[1]}")
-
-                print("\nOTHER SCHOLARSHIPS:")
-                print("-" * 80)
-                for row in rows:
-                    if not row[4]:  # not featured
-                        status = "✓" if row[3] else "✗"
-                        print(f"  {status}: {row[1]}")
-
-    def show_priority_status(self):
-        """Show which priority scholarships have images"""
-        with self.engine.connect() as conn:
-            print("\nPRIORITY SCHOLARSHIPS STATUS (⭐ Featured/High-Value):")
+            print("\nCurrent Scholarships in Database:")
             print("=" * 80)
-
-            for title in PRIORITY_SCHOLARSHIPS:
-                query = text(
-                    """
-                    SELECT id, primary_image_url
-                    FROM scholarships
-                    WHERE title = :title
-                """
-                )
-                result = conn.execute(query, {"title": title})
-                row = result.fetchone()
-
-                if row:
-                    status = "✓" if row[1] else "✗"
-                    print(f"{status} {title}")
-                else:
-                    print(f"? {title} (not found in DB)")
+            for row in rows:
+                image_status = "✓ Has image" if row[3] else "✗ No image"
+                print(f"ID: {row[0]}")
+                print(f"  Title: {row[1]}")
+                print(f"  Organization: {row[2]}")
+                print(f"  Image: {image_status}")
+                if row[3]:
+                    print(f"  URL: {row[3]}")
+                print()
 
 
 def main():
@@ -280,25 +248,17 @@ def main():
         description="Upload scholarship images to Digital Ocean Spaces"
     )
     parser.add_argument(
-        "--list", action="store_true", help="List all scholarships with image status"
-    )
-    parser.add_argument(
-        "--priority",
+        "--list",
         action="store_true",
-        help="Only process priority/featured scholarships",
-    )
-    parser.add_argument(
-        "--status", action="store_true", help="Show priority scholarship status"
+        help="List all scholarships in the database",
     )
 
     args = parser.parse_args()
 
-    uploader = ScholarshipImageUploader(priority_only=args.priority)
+    uploader = ScholarshipImageUploader()
 
     if args.list:
-        uploader.list_scholarships(show_images=True)
-    elif args.status:
-        uploader.show_priority_status()
+        uploader.list_scholarships()
     else:
         uploader.process_images()
 
