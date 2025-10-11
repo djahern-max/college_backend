@@ -1,15 +1,12 @@
-# scripts/upload_manual_images.py
+#!/usr/bin/env python3
 """
 Script to upload manually downloaded images to Digital Ocean Spaces
 and update the database with CDN URLs.
 
-This script:
-1. Reads images from the manual_images directory
-2. Uploads them to Digital Ocean Spaces with proper folder structure
-3. Updates the institutions table with CDN URLs
-
 Usage:
-    python scripts/upload_manual_images.py --state ak
+    python scripts/upload_manual_images.py --state ar
+    python scripts/upload_manual_images.py --all
+    python scripts/upload_manual_images.py --state ar --dry-run
 """
 
 import os
@@ -22,24 +19,24 @@ from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 import argparse
 
-# Add parent directory to path to import app modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 load_dotenv()
 
 
 class ImageUploader:
-    def __init__(self, state_code):
-        self.state_code = state_code.lower()
+    def __init__(self, state_code=None, dry_run=False):
+        self.state_code = state_code.lower() if state_code else None
+        self.dry_run = dry_run
 
         # Digital Ocean Spaces configuration
-        self.s3_client = boto3.client(
-            "s3",
-            region_name=os.getenv("DIGITAL_OCEAN_SPACES_REGION"),
-            endpoint_url=os.getenv("DIGITAL_OCEAN_SPACES_ENDPOINT"),
-            aws_access_key_id=os.getenv("DIGITAL_OCEAN_SPACES_ACCESS_KEY"),
-            aws_secret_access_key=os.getenv("DIGITAL_OCEAN_SPACES_SECRET_KEY"),
-        )
+        if not dry_run:
+            self.s3_client = boto3.client(
+                "s3",
+                region_name=os.getenv("DIGITAL_OCEAN_SPACES_REGION"),
+                endpoint_url=os.getenv("DIGITAL_OCEAN_SPACES_ENDPOINT"),
+                aws_access_key_id=os.getenv("DIGITAL_OCEAN_SPACES_ACCESS_KEY"),
+                aws_secret_access_key=os.getenv("DIGITAL_OCEAN_SPACES_SECRET_KEY"),
+            )
 
         self.bucket_name = os.getenv("DIGITAL_OCEAN_SPACES_BUCKET")
         self.cdn_base_url = os.getenv("IMAGE_CDN_BASE_URL")
@@ -52,15 +49,31 @@ class ImageUploader:
         self.project_root = Path(__file__).parent.parent
         self.manual_images_dir = self.project_root / "manual_images"
 
+        # Manual mappings for Arkansas schools
+        # Format: filename_without_extension -> ipeds_id
+        self.ar_mappings = {
+            "Arkansas_State": 106458,
+            "Arkansas_Tech_University": 106467,
+            "Harding_University": 107044,
+            "Henderson_State_University": 107071,
+            "John_Brown_University": 107141,
+            "South_Arkansas_University": 107983,
+            "University_of_Arkansas": 106397,
+            "University_Arkansas_Community_College-Morrilton": 107585,
+            "University_of_Arkansas_at_Little_Rock": 106245,
+            "University_of_Arkansas_at_Pine_Bluff": 106412,
+            "University_Arkansas-Fort_Smith": 108092,
+            "Univ_Central_Arkansas": 106704,
+        }
+
     def sanitize_filename(self, name):
         """Convert institution name to safe filename format"""
-        # Remove special characters and replace spaces with underscores
         safe_name = re.sub(r"[^\w\s-]", "", name)
         safe_name = re.sub(r"[-\s]+", "_", safe_name)
         return safe_name.strip("_")
 
     def optimize_image(self, image_path, max_width=1200):
-        """Optimize image for web with proper quality"""
+        """Optimize image for web"""
         with Image.open(image_path) as img:
             # Convert RGBA to RGB if necessary
             if img.mode == "RGBA":
@@ -77,13 +90,17 @@ class ImageUploader:
                 img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
 
             # Save optimized to temporary file
-            temp_path = image_path.parent / f"temp_{image_path.name}"
+            temp_path = image_path.parent / f"temp_{image_path.stem}_optimized.jpg"
             img.save(temp_path, "JPEG", quality=85, optimize=True)
 
             return temp_path
 
     def upload_to_spaces(self, local_path, s3_key):
         """Upload file to Digital Ocean Spaces"""
+        if self.dry_run:
+            print(f"  [DRY RUN] Would upload: {s3_key}")
+            return f"{self.cdn_base_url}/{s3_key}"
+
         try:
             # Optimize image first
             optimized_path = self.optimize_image(local_path)
@@ -104,115 +121,169 @@ class ImageUploader:
             optimized_path.unlink()
 
             cdn_url = f"{self.cdn_base_url}/{s3_key}"
-            print(f"✓ Uploaded: {s3_key}")
+            print(f"  ✓ Uploaded: {s3_key}")
             return cdn_url
 
         except Exception as e:
-            print(f"✗ Error uploading {s3_key}: {str(e)}")
+            print(f"  ✗ Error uploading {s3_key}: {str(e)}")
             return None
 
-    def match_institution_name(self, filename):
-        """Extract institution name from filename and try to match with database"""
-        # Remove file extension and common prefixes
-        name = filename.replace(".jpg", "").replace(".jpeg", "").replace(".png", "")
-        name = re.sub(r"^(ACC-|Alaska-|alaska-)", "", name, flags=re.IGNORECASE)
-
-        # Convert to more readable format
-        name = name.replace("-", " ").replace("_", " ")
-        name = re.sub(r"\s+", " ", name).strip()
-
-        # Try to find matching institution
+    def get_institution_by_ipeds(self, ipeds_id):
+        """Get institution details from database by IPEDS ID"""
         with self.engine.connect() as conn:
-            # Try exact match first
             query = text(
                 """
-                SELECT id, ipeds_id, name 
+                SELECT id, ipeds_id, name, state, city
                 FROM institutions 
-                WHERE LOWER(state) = :state 
-                AND LOWER(name) LIKE :pattern
+                WHERE ipeds_id = :ipeds_id
                 LIMIT 1
             """
             )
+            result = conn.execute(query, {"ipeds_id": ipeds_id})
+            row = result.fetchone()
 
-            patterns = [
-                f"%{name.lower()}%",
-                f"%{name.lower().split()[0]}%",
-                f"%{' '.join(name.lower().split()[:2])}%",
-            ]
+            if row:
+                return {
+                    "id": row[0],
+                    "ipeds_id": row[1],
+                    "name": row[2],
+                    "state": row[3],
+                    "city": row[4],
+                }
+        return None
 
-            for pattern in patterns:
-                result = conn.execute(
-                    query, {"state": self.state_code, "pattern": pattern}
-                )
-                row = result.fetchone()
-                if row:
-                    return {"id": row[0], "ipeds_id": row[1], "name": row[2]}
+    def match_by_mapping(self, filename):
+        """Match filename using manual mappings"""
+        # Remove file extension
+        name = filename
+        for ext in [".jpg", ".jpeg", ".png", ".webp", ".JPG", ".JPEG", ".PNG", ".WEBP"]:
+            if name.endswith(ext):
+                name = name[: -len(ext)]
+                break
+
+        # Check Arkansas mappings
+        if name in self.ar_mappings:
+            ipeds_id = self.ar_mappings[name]
+            return self.get_institution_by_ipeds(ipeds_id)
 
         return None
 
-    def process_images(self):
-        """Process all images in manual_images directory for the specified state"""
+    def get_image_files(self):
+        """Get all image files from manual_images directory"""
         if not self.manual_images_dir.exists():
             print(f"Error: Directory {self.manual_images_dir} not found")
+            return []
+
+        image_files = []
+        for ext in [
+            "*.jpg",
+            "*.jpeg",
+            "*.png",
+            "*.webp",
+            "*.JPG",
+            "*.JPEG",
+            "*.PNG",
+            "*.WEBP",
+        ]:
+            image_files.extend(self.manual_images_dir.glob(ext))
+
+        return sorted(image_files)
+
+    def process_images(self):
+        """Process all images in manual_images directory"""
+        image_files = self.get_image_files()
+
+        if not image_files:
+            print(f"No images found in {self.manual_images_dir}")
             return
 
-        # Get all image files
-        image_files = list(self.manual_images_dir.glob("*.[jJ][pP][gG]"))
-        image_files.extend(self.manual_images_dir.glob("*.[jJ][pP][eE][gG]"))
-        image_files.extend(self.manual_images_dir.glob("*.[pP][nN][gG]"))
-
-        print(f"\nFound {len(image_files)} images in {self.manual_images_dir}")
-        print(f"Processing images for state: {self.state_code.upper()}\n")
+        print(f"\n{'='*60}")
+        if self.dry_run:
+            print("DRY RUN MODE - No changes will be made")
+        else:
+            print("LIVE MODE - Changes will be saved")
+        print(f"{'='*60}")
+        print(f"Found {len(image_files)} images in {self.manual_images_dir}")
+        if self.state_code:
+            print(f"Processing images for state: {self.state_code.upper()}")
+        else:
+            print("Processing images for ALL states")
+        print()
 
         uploaded_count = 0
         updated_count = 0
+        skipped_count = 0
+        no_match_files = []
 
         for image_path in image_files:
             print(f"\nProcessing: {image_path.name}")
 
-            # Match with institution
-            institution = self.match_institution_name(image_path.stem)
+            # Match with institution using mappings
+            institution = self.match_by_mapping(image_path.name)
 
             if not institution:
-                print(f"  ✗ Could not match institution for {image_path.name}")
-                print(f"    Please manually update or rename file")
+                print(f"  ✗ No mapping found for {image_path.name}")
+                no_match_files.append(image_path.name)
+                skipped_count += 1
                 continue
 
-            print(
-                f"  → Matched: {institution['name']} (IPEDS: {institution['ipeds_id']})"
-            )
+            # Check state filter
+            if self.state_code and institution["state"].lower() != self.state_code:
+                print(
+                    f"  ⊘ Skipped (wrong state): {institution['name']} ({institution['state']})"
+                )
+                skipped_count += 1
+                continue
 
-            # Create S3 key with state folder structure
+            print(f"  → Matched: {institution['name']}")
+            print(f"     City: {institution['city']}, {institution['state']}")
+            print(f"     IPEDS: {institution['ipeds_id']}")
+
+            # Create S3 key
             safe_name = self.sanitize_filename(institution["name"])
-            s3_key = f"institutions/{self.state_code}/{safe_name}_optimized.jpg"
+            state = institution["state"].lower()
+            s3_key = f"institutions/{state}/{safe_name}_optimized.jpg"
 
             # Upload to Spaces
             cdn_url = self.upload_to_spaces(image_path, s3_key)
 
             if cdn_url:
-                # Update database - simplified to match your schema
-                with self.engine.connect() as conn:
-                    update_query = text(
+                # Update database
+                if not self.dry_run:
+                    with self.engine.connect() as conn:
+                        update_query = text(
+                            """
+                            UPDATE institutions 
+                            SET primary_image_url = :url,
+                                updated_at = NOW()
+                            WHERE id = :id
                         """
-                        UPDATE institutions 
-                        SET primary_image_url = :url,
-                            updated_at = NOW()
-                        WHERE id = :id
-                    """
-                    )
-                    conn.execute(
-                        update_query, {"url": cdn_url, "id": institution["id"]}
-                    )
-                    conn.commit()
+                        )
+                        conn.execute(
+                            update_query, {"url": cdn_url, "id": institution["id"]}
+                        )
+                        conn.commit()
+                    print(f"  ✓ Database updated with CDN URL")
+                else:
+                    print(f"  [DRY RUN] Would update database with: {cdn_url}")
 
-                print(f"  ✓ Database updated with CDN URL")
                 uploaded_count += 1
                 updated_count += 1
 
+        # Print summary
         print(f"\n{'='*60}")
-        print(f"Summary for {self.state_code.upper()}:")
-        print(f"  Images uploaded: {uploaded_count}")
+        print("Summary:")
+        print(f"  Images processed: {len(image_files)}")
+        print(f"  Successfully matched & uploaded: {uploaded_count}")
         print(f"  Database records updated: {updated_count}")
+        print(f"  Skipped: {skipped_count}")
+
+        if no_match_files:
+            print(f"\n  Files without mappings:")
+            for filename in no_match_files:
+                print(f"    - {filename}")
+            print(f"\n  Add mappings to the script or rename files")
+
         print(f"{'='*60}\n")
 
 
@@ -223,13 +294,27 @@ def main():
     parser.add_argument(
         "--state",
         type=str,
-        required=True,
-        help="State code (e.g., ak for Alaska, ma for Massachusetts)",
+        help="State code (e.g., ar for Arkansas, ma for Massachusetts)",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Process images for all states",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview without making changes",
     )
 
     args = parser.parse_args()
 
-    uploader = ImageUploader(args.state)
+    if not args.all and not args.state:
+        parser.error("Either --state or --all must be specified")
+
+    state_code = None if args.all else args.state
+
+    uploader = ImageUploader(state_code=state_code, dry_run=args.dry_run)
     uploader.process_images()
 
 
