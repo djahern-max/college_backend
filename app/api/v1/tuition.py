@@ -58,8 +58,6 @@ class TuitionProjectionCalculator:
         base_tuition_in = tuition_data.tuition_in_state or 0
         base_tuition_out = tuition_data.tuition_out_state or base_tuition_in * 1.5
         base_room_board = tuition_data.room_board_on_campus or 12000
-        base_books = tuition_data.books_supplies or 1200
-        base_personal = tuition_data.personal_expenses or 3000
 
         for target_year in range(base_year + 1, base_year + years + 1):
             if custom_inflation_rate is not None:
@@ -82,18 +80,12 @@ class TuitionProjectionCalculator:
                     base_tuition_out * cumulative_rate, 2
                 ),
                 "projected_room_board": round(base_room_board * cumulative_rate, 2),
-                "projected_books_supplies": round(base_books * cumulative_rate, 2),
-                "projected_personal_expenses": round(
-                    base_personal * cumulative_rate, 2
-                ),
                 "projected_total_cost_in_state": round(
-                    (base_tuition_in + base_room_board + base_books + base_personal)
-                    * cumulative_rate,
+                    (base_tuition_in + base_room_board) * cumulative_rate,
                     2,
                 ),
                 "projected_total_cost_out_state": round(
-                    (base_tuition_out + base_room_board + base_books + base_personal)
-                    * cumulative_rate,
+                    (base_tuition_out + base_room_board) * cumulative_rate,
                     2,
                 ),
                 "inflation_rate_used": custom_inflation_rate

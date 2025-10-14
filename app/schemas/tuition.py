@@ -13,23 +13,12 @@ from app.models.tuition import ValidationStatus
 class AffordabilityCategory(str, Enum):
     """Affordability categories"""
 
-    VERY_AFFORDABLE = "VERY_AFFORDABLE"  # uppercase
-    AFFORDABLE = "AFFORDABLE"  # uppercase
-    MODERATE = "MODERATE"  # uppercase
-    EXPENSIVE = "EXPENSIVE"  # uppercase
-    VERY_EXPENSIVE = "VERY_EXPENSIVE"  # uppercase
-    UNKNOWN = "UNKNOWN"  # uppercase
-
-
-# NEW: Room and board breakdown schema
-class RoomBoardInfo(BaseModel):
-    """Schema for room and board breakdown information"""
-
-    total: float = Field(0, description="Total room and board cost")
-    has_breakdown: bool = Field(False, description="Whether breakdown is available")
-    housing: Optional[float] = Field(None, description="Housing/room cost")
-    meals: Optional[float] = Field(None, description="Meals/dining cost")
-    breakdown: Optional[Dict[str, Any]] = Field(None, description="Full breakdown data")
+    VERY_AFFORDABLE = "VERY_AFFORDABLE"
+    AFFORDABLE = "AFFORDABLE"
+    MODERATE = "MODERATE"
+    EXPENSIVE = "EXPENSIVE"
+    VERY_EXPENSIVE = "VERY_EXPENSIVE"
+    UNKNOWN = "UNKNOWN"
 
 
 # Base schemas
@@ -68,24 +57,6 @@ class TuitionDataBase(BaseModel):
     room_board_on_campus: Optional[float] = Field(
         None, ge=0, description="On-campus room and board"
     )
-    room_board_off_campus: Optional[float] = Field(
-        None, ge=0, description="Off-campus room and board"
-    )
-
-    # NEW: Room and board breakdown
-    room_board_breakdown: Optional[Dict[str, Any]] = Field(
-        None, description="Room and board cost breakdown"
-    )
-
-    books_supplies: Optional[float] = Field(
-        None, ge=0, description="Books and supplies"
-    )
-    personal_expenses: Optional[float] = Field(
-        None, ge=0, description="Personal expenses"
-    )
-    transportation: Optional[float] = Field(
-        None, ge=0, description="Transportation costs"
-    )
 
     # Data quality indicators
     has_tuition_data: bool = Field(False, description="Has tuition data available")
@@ -117,11 +88,6 @@ class TuitionDataUpdate(BaseModel):
     tuition_fees_in_state: Optional[float] = Field(None, ge=0)
     tuition_fees_out_state: Optional[float] = Field(None, ge=0)
     room_board_on_campus: Optional[float] = Field(None, ge=0)
-    room_board_off_campus: Optional[float] = Field(None, ge=0)
-    room_board_breakdown: Optional[Dict[str, Any]] = Field(None)  # NEW
-    books_supplies: Optional[float] = Field(None, ge=0)
-    personal_expenses: Optional[float] = Field(None, ge=0)
-    transportation: Optional[float] = Field(None, ge=0)
     has_tuition_data: Optional[bool] = None
     has_fees_data: Optional[bool] = None
     has_living_data: Optional[bool] = None
@@ -139,13 +105,6 @@ class CostBreakdown(BaseModel):
     tuition_fees_in_state: Optional[float] = None
     tuition_fees_out_state: Optional[float] = None
     room_board_on_campus: Optional[float] = None
-    room_board_off_campus: Optional[float] = None
-    books_supplies: Optional[float] = None
-    personal_expenses: Optional[float] = None
-    transportation: Optional[float] = None
-
-    # NEW: Room and board breakdown info
-    room_board_info: Optional[RoomBoardInfo] = None
 
 
 class TuitionProjection(BaseModel):
@@ -235,11 +194,6 @@ class TuitionDataResponse(TuitionDataBase):
         ..., description="Has comprehensive financial data"
     )
 
-    # NEW: Room and board information
-    room_board_info: Optional[RoomBoardInfo] = Field(
-        None, description="Room and board breakdown information"
-    )
-
     # Detailed breakdown
     cost_breakdown: CostBreakdown = Field(..., description="Detailed cost breakdown")
 
@@ -250,66 +204,39 @@ class TuitionDataResponse(TuitionDataBase):
     class Config:
         from_attributes = True
 
-        # Updated example to show room/board breakdown
         json_schema_extra = {
             "example": {
                 "id": 1,
-                "ipeds_id": 183044,
-                "academic_year": "2025-26",
-                "data_source": "Manual",
-                "tuition_in_state": 15908,
-                "tuition_out_state": 37070,
-                "required_fees_in_state": 3592,
-                "required_fees_out_state": 3592,
-                "tuition_fees_in_state": 19500,
-                "tuition_fees_out_state": 40662,
-                "room_board_on_campus": 14704,
-                "room_board_off_campus": 12000,
-                "room_board_breakdown": {
-                    "housing": 9346,
-                    "meals": 5358,
-                    "total": 14704,
-                    "source": "UNH 2025-26 official",
-                },
-                "books_supplies": 1200,
-                "personal_expenses": 2800,
-                "transportation": 1800,
+                "ipeds_id": 100654,
+                "academic_year": "2024-2025",
+                "data_source": "institution_website",
+                "tuition_in_state": 10566,
+                "tuition_out_state": 19176,
+                "required_fees_in_state": None,
+                "required_fees_out_state": None,
+                "tuition_fees_in_state": 10566,
+                "tuition_fees_out_state": 19176,
+                "room_board_on_campus": 9465,
                 "has_tuition_data": True,
-                "has_fees_data": True,
+                "has_fees_data": False,
                 "has_living_data": True,
-                "data_completeness_score": 95,
+                "data_completeness_score": 100,
                 "validation_status": "VALIDATED",
-                "total_cost_in_state": 40004,
-                "total_cost_out_state": 61166,
+                "total_cost_in_state": 20031,
+                "total_cost_out_state": 28641,
                 "affordability_category": "AFFORDABLE",
                 "has_comprehensive_data": True,
-                "room_board_info": {
-                    "total": 14704,
-                    "has_breakdown": True,
-                    "housing": 9346,
-                    "meals": 5358,
-                    "breakdown": {
-                        "housing": 9346,
-                        "meals": 5358,
-                        "total": 14704,
-                        "source": "UNH 2025-26 official",
-                    },
-                },
                 "cost_breakdown": {
-                    "tuition_in_state": 15908,
-                    "tuition_out_state": 37070,
-                    "required_fees_in_state": 3592,
-                    "required_fees_out_state": 3592,
-                    "tuition_fees_in_state": 19500,
-                    "tuition_fees_out_state": 40662,
-                    "room_board_on_campus": 14704,
-                    "room_board_off_campus": 12000,
-                    "books_supplies": 1200,
-                    "personal_expenses": 2800,
-                    "transportation": 1800,
+                    "tuition_in_state": 10566,
+                    "tuition_out_state": 19176,
+                    "required_fees_in_state": None,
+                    "required_fees_out_state": None,
+                    "tuition_fees_in_state": 10566,
+                    "tuition_fees_out_state": 19176,
+                    "room_board_on_campus": 9465,
                 },
-                "created_at": "2024-09-23T10:00:00",
-                "updated_at": "2024-09-23T15:30:00",
+                "created_at": "2024-10-07T08:14:22",
+                "updated_at": "2024-10-12T15:28:46",
             }
         }
 

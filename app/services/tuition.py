@@ -363,18 +363,14 @@ class TuitionService:
             or tuition_data.required_fees_out_state is not None
         )
 
-        # Check if has living data
-        tuition_data.has_living_data = (
-            tuition_data.room_board_on_campus is not None
-            or tuition_data.room_board_off_campus is not None
-            or tuition_data.books_supplies is not None
-        )
+        # Check if has living data (only room_board_on_campus now)
+        tuition_data.has_living_data = tuition_data.room_board_on_campus is not None
 
         # Calculate completeness score (0-100)
         score = 0
         total_fields = 0
 
-        # Core tuition fields (40% weight)
+        # Core tuition fields (50% weight)
         tuition_fields = [
             tuition_data.tuition_in_state,
             tuition_data.tuition_out_state,
@@ -382,22 +378,17 @@ class TuitionService:
             tuition_data.tuition_fees_out_state,
         ]
         for field in tuition_fields:
-            total_fields += 10
+            total_fields += 12.5
             if field is not None and field > 0:
-                score += 10
+                score += 12.5
 
-        # Living expense fields (35% weight)
-        living_fields = [
-            tuition_data.room_board_on_campus,
-            tuition_data.room_board_off_campus,
-            tuition_data.books_supplies,
-            tuition_data.personal_expenses,
-            tuition_data.transportation,
-        ]
-        for field in living_fields:
-            total_fields += 7
-            if field is not None and field > 0:
-                score += 7
+        # Living expense field (25% weight)
+        if (
+            tuition_data.room_board_on_campus is not None
+            and tuition_data.room_board_on_campus > 0
+        ):
+            score += 25
+        total_fields += 25
 
         # Fee fields (25% weight)
         fee_fields = [
@@ -405,12 +396,12 @@ class TuitionService:
             tuition_data.required_fees_out_state,
         ]
         for field in fee_fields:
-            total_fields += 12
+            total_fields += 12.5
             if field is not None and field > 0:
-                score += 12
+                score += 12.5
 
         tuition_data.data_completeness_score = (
-            min(100, score) if total_fields > 0 else 0
+            min(100, int(score)) if total_fields > 0 else 0
         )
 
         # Set validation status based on data quality
@@ -465,7 +456,7 @@ class TuitionService:
                     )
                     .count()
                 )
-            else:  # VERY_EXPENSIVE
+            else:  # VERY_EXPENSIVE or UNKNOWN
                 count = (
                     self.db.query(TuitionData)
                     .filter(TuitionData.tuition_in_state >= 55000)
