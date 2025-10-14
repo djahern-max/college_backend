@@ -58,11 +58,11 @@ class TuitionData(Base):
         comment='Academic year (e.g., "2023-24")',
     )
     data_source = Column(
-        String(50),
+        String(500),
         nullable=False,
         default="IPEDS",
         index=True,
-        comment='Source of the data (e.g., "IPEDS", "Manual")',
+        comment='Source of the data (e.g., "IPEDS", "Manual", "School Website)',
     )
 
     # Core tuition fields

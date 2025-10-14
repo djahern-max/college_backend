@@ -67,10 +67,6 @@ async def get_institution_costs(ipeds_id: int, db: Session = Depends(get_db)):
             "tuition_fees_out_state": tuition_data.tuition_fees_out_state,
             # Living expenses
             "room_board_on_campus": tuition_data.room_board_on_campus,
-            "room_board_off_campus": tuition_data.room_board_off_campus,
-            "books_supplies": tuition_data.books_supplies,
-            "personal_expenses": tuition_data.personal_expenses,
-            "transportation": tuition_data.transportation,
             # Data quality indicators
             "has_tuition_data": tuition_data.has_tuition_data,
             "has_fees_data": tuition_data.has_fees_data,
@@ -141,7 +137,7 @@ async def get_institution_costs_summary(
             if is_in_state
             else tuition_data.required_fees_out_state
         )
-        room_board = tuition_data.room_board_on_campus  # Default to on-campus
+        room_board = tuition_data.room_board_on_campus
 
         # Calculate estimated total
         total_cost = 0
@@ -151,8 +147,6 @@ async def get_institution_costs_summary(
             total_cost += fees
         if room_board:
             total_cost += room_board
-        if tuition_data.books_supplies:
-            total_cost += tuition_data.books_supplies
 
         return {
             "ipeds_id": ipeds_id,
@@ -163,7 +157,6 @@ async def get_institution_costs_summary(
             "tuition": tuition,
             "fees": fees,
             "room_and_board": room_board,
-            "books_and_supplies": tuition_data.books_supplies,
             "estimated_total": total_cost if total_cost > 0 else None,
             "data_completeness_score": tuition_data.data_completeness_score,
         }

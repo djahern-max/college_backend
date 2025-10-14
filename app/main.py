@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.api.v1 import user, oauth, scholarships, institution, tuition, profiles, costs
+from app.api.v1 import user, oauth, scholarships, institution, profiles, costs
 from fastapi.routing import APIRoute
 from fastapi.responses import PlainTextResponse
 
