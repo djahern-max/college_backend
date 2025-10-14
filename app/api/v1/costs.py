@@ -6,7 +6,6 @@ Focuses on frontend display needs.
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import Optional
 import logging
 
 from app.core.database import get_db
@@ -62,16 +61,8 @@ async def get_institution_costs(ipeds_id: int, db: Session = Depends(get_db)):
             # Fees
             "required_fees_in_state": tuition_data.required_fees_in_state,
             "required_fees_out_state": tuition_data.required_fees_out_state,
-            # Combined tuition + fees
-            "tuition_fees_in_state": tuition_data.tuition_fees_in_state,
-            "tuition_fees_out_state": tuition_data.tuition_fees_out_state,
             # Living expenses
             "room_board_on_campus": tuition_data.room_board_on_campus,
-            # Data quality indicators
-            "has_tuition_data": tuition_data.has_tuition_data,
-            "has_fees_data": tuition_data.has_fees_data,
-            "has_living_data": tuition_data.has_living_data,
-            "data_completeness_score": tuition_data.data_completeness_score,
             # Timestamps
             "created_at": (
                 tuition_data.created_at.isoformat() if tuition_data.created_at else None
@@ -158,7 +149,6 @@ async def get_institution_costs_summary(
             "fees": fees,
             "room_and_board": room_board,
             "estimated_total": total_cost if total_cost > 0 else None,
-            "data_completeness_score": tuition_data.data_completeness_score,
         }
 
     except HTTPException:
@@ -213,13 +203,25 @@ async def compare_institution_costs(
                 )
                 continue
 
-            # Get appropriate tuition based on residency
+            # Get appropriate costs based on residency
             is_in_state = residency == "in_state"
             tuition = (
                 tuition_data.tuition_in_state
                 if is_in_state
                 else tuition_data.tuition_out_state
             )
+            fees = (
+                tuition_data.required_fees_in_state
+                if is_in_state
+                else tuition_data.required_fees_out_state
+            )
+
+            # Calculate combined tuition + fees
+            tuition_fees_combined = 0
+            if tuition:
+                tuition_fees_combined += tuition
+            if fees:
+                tuition_fees_combined += fees
 
             results.append(
                 {
@@ -234,13 +236,11 @@ async def compare_institution_costs(
                     "has_data": True,
                     "academic_year": tuition_data.academic_year,
                     "tuition": tuition,
+                    "fees": fees,
                     "tuition_fees_combined": (
-                        tuition_data.tuition_fees_in_state
-                        if is_in_state
-                        else tuition_data.tuition_fees_out_state
+                        tuition_fees_combined if tuition_fees_combined > 0 else None
                     ),
                     "room_board": tuition_data.room_board_on_campus,
-                    "data_completeness_score": tuition_data.data_completeness_score,
                 }
             )
 
