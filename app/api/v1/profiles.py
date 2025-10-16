@@ -1,111 +1,86 @@
-# app/api/v1/profiles.py - CLEANED UP
+# app/api/v1/profiles.py - REFACTORED WITH SERVICE LAYER
 """
-Simplified profiles API - only uses fields that exist in minimal model
-Removed references to dropped fields
+Simplified profiles API - uses ProfileService for business logic
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from typing import List
 
 from app.core.database import get_db
 from app.api.deps import get_current_user
-from app.models.profile import UserProfile
-from app.models.institution import Institution
+from app.services.profile import ProfileService
 from app.schemas.profile import ProfileUpdate, ProfileResponse, ProfileSimple
+from app.schemas.institution import InstitutionResponse  # You'll need this
 
 router = APIRouter()
 
 
-@router.get("/", response_model=ProfileResponse)
-async def get_profile(
+@router.get("/me", response_model=ProfileResponse)
+async def get_my_profile(
     current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """Get current user's profile"""
-    profile = (
-        db.query(UserProfile).filter(UserProfile.user_id == current_user["id"]).first()
-    )
+    profile_service = ProfileService(db)
+    profile = profile_service.get_by_user_id(current_user["id"])
 
     if not profile:
         # Create empty profile if doesn't exist
-        profile = UserProfile(user_id=current_user["id"])
-        db.add(profile)
-        db.commit()
-        db.refresh(profile)
+        from app.schemas.profile import ProfileCreate
+
+        profile = profile_service.create_profile(
+            user_id=current_user["id"], profile_data=ProfileCreate()
+        )
 
     return profile
 
 
-@router.put("/", response_model=ProfileResponse)
-async def update_profile(
+@router.put("/me", response_model=ProfileResponse)
+async def update_my_profile(
     profile_data: ProfileUpdate,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Update current user's profile"""
-    profile = (
-        db.query(UserProfile).filter(UserProfile.user_id == current_user["id"]).first()
-    )
+    profile_service = ProfileService(db)
 
-    # Create if doesn't exist
+    # Try to update existing profile
+    profile = profile_service.update_profile(current_user["id"], profile_data)
+
+    # If profile doesn't exist, create it
     if not profile:
-        profile = UserProfile(user_id=current_user["id"])
-        db.add(profile)
+        from app.schemas.profile import ProfileCreate
 
-    # Update fields (only if provided in request)
-    update_data = profile_data.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(profile, field, value)
-
-    db.commit()
-    db.refresh(profile)
+        # Convert ProfileUpdate to ProfileCreate
+        create_data = ProfileCreate(**profile_data.model_dump(exclude_unset=True))
+        profile = profile_service.create_profile(current_user["id"], create_data)
 
     return profile
 
 
-@router.get("/school-matches")
-async def get_school_matches(
-    current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)
+@router.get("/me/matching-institutions", response_model=List[InstitutionResponse])
+async def get_matching_institutions(
+    limit: int = 50,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
-    Get school matches based on profile state
-    Simple matching: shows schools in user's state
+    Get institutions matching user's location preference
+
+    Returns institutions in the state specified in user's location_preference field
     """
-
-    # Get profile
-    profile = (
-        db.query(UserProfile).filter(UserProfile.user_id == current_user["id"]).first()
+    profile_service = ProfileService(db)
+    institutions = profile_service.find_matching_institutions(
+        user_id=current_user["id"], limit=limit
     )
 
-    if not profile or not profile.state:
-        return {
-            "matches": [],
-            "total": 0,
-            "message": "Add your state to your profile to see school matches",
-        }
+    if not institutions:
+        # Check if user has set a location preference
+        profile = profile_service.get_by_user_id(current_user["id"])
+        if not profile or not profile.location_preference:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Please set your location_preference in your profile first",
+            )
 
-    # Get schools in user's state
-    schools = (
-        db.query(Institution).filter(Institution.state == profile.state).limit(50).all()
-    )
-
-    # Format response
-    matches = []
-    for school in schools:
-        matches.append(
-            {
-                "id": school.id,
-                "ipeds_id": school.ipeds_id,
-                "name": school.name,
-                "city": school.city,
-                "state": school.state,
-                "control_type": school.control_type.value,
-                "image_url": school.primary_image_url,
-                "match_score": 100,  # In user's state = 100% match
-            }
-        )
-
-    return {
-        "matches": matches,
-        "total": len(matches),
-        "user_state": profile.state,
-    }
+    return institutions

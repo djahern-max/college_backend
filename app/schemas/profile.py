@@ -25,8 +25,12 @@ class ProfileBase(BaseModel):
     act_score: Optional[int] = Field(None, ge=1, le=36)
     intended_major: Optional[str] = Field(None, max_length=255)
 
-    @validator("state")
-    def validate_state(cls, v):
+    # Matching Criteria
+    location_preference: Optional[str] = Field(None, min_length=2, max_length=2)
+
+    @validator("state", "location_preference")
+    def validate_state_codes(cls, v):
+        """Validate and uppercase state codes"""
         if v:
             return v.upper()
         return v
@@ -65,6 +69,7 @@ class ProfileSimple(BaseModel):
     graduation_year: Optional[int]
     gpa: Optional[float]
     intended_major: Optional[str]
+    location_preference: Optional[str]  # Include in simple view for matching
 
     class Config:
         from_attributes = True

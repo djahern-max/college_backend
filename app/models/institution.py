@@ -1,4 +1,4 @@
-# app/models/institution.py - SIMPLIFIED VERSION
+# app/models/institution.py
 """
 Streamlined Institution model - removed 13 unused fields (59% reduction)
 Only includes fields that are actually being used in production

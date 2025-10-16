@@ -43,6 +43,13 @@ class UserProfile(Base):
     intended_major = Column(String(255), nullable=True)
 
     # ===========================
+    # MATCHING CRITERIA (1 field)
+    # ===========================
+    location_preference = Column(
+        String(2), nullable=True, index=True
+    )  # State code: NH, CO, CA, etc.
+
+    # ===========================
     # TIMESTAMPS (2 fields)
     # ===========================
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
