@@ -1,3 +1,5 @@
+# app/api/deps.py
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
@@ -80,15 +82,8 @@ async def get_current_user(
 
         logger.info("Successfully authenticated user: %s", user.email)
 
-        # Return user data as dict (matching your existing code)
-        return {
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "first_name": user.first_name,
-            "last_name": user.last_name,
-            "is_active": user.is_active,
-        }
+        # CHANGED: Return the actual User object instead of dict
+        return user
 
     except HTTPException:
         raise

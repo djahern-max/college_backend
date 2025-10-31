@@ -291,3 +291,134 @@ class ScholarshipService:
         except Exception as e:
             logger.error(f"Error getting scholarships by deadline: {str(e)}")
             raise Exception(f"Failed to get scholarships by deadline: {str(e)}")
+
+    def find_by_gpa(
+        self, gpa: float, limit: int = 20, only_active: bool = True
+    ) -> List[Scholarship]:
+        """
+        Find scholarships that match the user's GPA
+
+        Matching logic:
+        - If scholarship has min_gpa requirement, user's GPA must meet or exceed it
+        - If scholarship has no min_gpa, it's open to everyone
+        - Only returns ACTIVE scholarships by default
+
+        Args:
+            gpa: User's GPA (on their scale, e.g., 4.49 on weighted 5.0 scale)
+            limit: Maximum number of results
+            only_active: If True, only return active scholarships
+
+        Returns:
+            List of matching scholarships, ordered by amount (highest first)
+        """
+
+        try:
+            query = self.db.query(Scholarship)
+
+            # Filter by active status
+            if only_active:
+                query = query.filter(Scholarship.status == ScholarshipStatus.ACTIVE)
+
+            # Match by GPA
+            # Include scholarships where:
+            # 1. min_gpa is NULL (no GPA requirement), OR
+            # 2. user's GPA >= min_gpa requirement
+            query = query.filter(
+                or_(Scholarship.min_gpa.is_(None), Scholarship.min_gpa <= gpa)
+            )
+
+            # Apply priority ordering (same as your other methods)
+            priority_order = case(
+                (Scholarship.title.ilike("%Lowe%Educational%"), 1),
+                (Scholarship.title.ilike("%Target%Community%"), 2),
+                (Scholarship.title.ilike("%Google%Lime%"), 3),
+                (Scholarship.title.ilike("%Coca%Cola%"), 4),
+                (Scholarship.title.ilike("%Violet%Richardson%"), 5),
+                (Scholarship.title.ilike("%National%Merit%"), 6),
+                (Scholarship.title.ilike("%Do%Something%"), 7),
+                (Scholarship.primary_image_url.isnot(None), 8),
+                else_=9,
+            )
+
+            query = query.order_by(asc(priority_order))
+
+            # Then order by amount (highest first)
+            query = query.order_by(desc(Scholarship.amount_max))
+            query = query.limit(limit)
+
+            return query.all()
+
+        except Exception as e:
+            logger.error(f"Error finding scholarships by GPA: {str(e)}")
+            raise Exception(f"Failed to find scholarships by GPA: {str(e)}")
+
+    def find_by_profile(
+        self,
+        gpa: Optional[float] = None,
+        state: Optional[str] = None,
+        graduation_year: Optional[int] = None,
+        intended_major: Optional[str] = None,
+        limit: int = 20,
+    ) -> List[Scholarship]:
+        """
+        Find scholarships matching user profile criteria
+        (For future use when adding more matching logic)
+
+        Currently only uses GPA matching.
+        Future: Will add state, graduation year, major matching.
+
+        Args:
+            gpa: User's GPA
+            state: User's state
+            graduation_year: User's graduation year
+            intended_major: User's intended major
+            limit: Maximum number of results
+
+        Returns:
+            List of matching scholarships
+        """
+
+        try:
+            query = self.db.query(Scholarship)
+            query = query.filter(Scholarship.status == ScholarshipStatus.ACTIVE)
+
+            # GPA matching (if provided)
+            if gpa is not None:
+                query = query.filter(
+                    or_(Scholarship.min_gpa.is_(None), Scholarship.min_gpa <= gpa)
+                )
+
+            # Future: Add state-based matching
+            # if state:
+            #     query = query.filter(...)
+
+            # Future: Add graduation year matching
+            # if graduation_year:
+            #     query = query.filter(...)
+
+            # Future: Add major-based matching
+            # if intended_major:
+            #     query = query.filter(...)
+
+            # Apply priority ordering
+            priority_order = case(
+                (Scholarship.title.ilike("%Lowe%Educational%"), 1),
+                (Scholarship.title.ilike("%Target%Community%"), 2),
+                (Scholarship.title.ilike("%Google%Lime%"), 3),
+                (Scholarship.title.ilike("%Coca%Cola%"), 4),
+                (Scholarship.title.ilike("%Violet%Richardson%"), 5),
+                (Scholarship.title.ilike("%National%Merit%"), 6),
+                (Scholarship.title.ilike("%Do%Something%"), 7),
+                (Scholarship.primary_image_url.isnot(None), 8),
+                else_=9,
+            )
+
+            query = query.order_by(asc(priority_order))
+            query = query.order_by(desc(Scholarship.amount_max))
+            query = query.limit(limit)
+
+            return query.all()
+
+        except Exception as e:
+            logger.error(f"Error finding scholarships by profile: {str(e)}")
+            raise Exception(f"Failed to find scholarships by profile: {str(e)}")

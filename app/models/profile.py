@@ -49,6 +49,9 @@ class UserProfile(Base):
         String(2), nullable=True, index=True
     )  # State code: NH, CO, CA, etc.
 
+    profile_image_url = Column(String(500), nullable=True)
+    resume_url = Column(String(500), nullable=True)
+
     # ===========================
     # TIMESTAMPS (2 fields)
     # ===========================

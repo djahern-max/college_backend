@@ -41,6 +41,16 @@ class Settings(BaseSettings):
     DIGITAL_OCEAN_SPACES_REGION: str = ""
     IMAGE_CDN_BASE_URL: str = ""
 
+    # File Upload Configuration
+    MAX_RESUME_SIZE_MB: int = 10  # Maximum resume file size in MB
+    ALLOWED_RESUME_EXTENSIONS: list = [".pdf", ".doc", ".docx"]
+    TEMP_UPLOAD_DIR: str = "/tmp/uploads"  # Temporary directory for file processing
+
+    ANTHROPIC_API_KEY: str = ""
+
+    class Config:
+        env_file = ".env"
+
     # CORS - Dynamic based on environment
     @property
     def CORS_ORIGINS(self) -> List[str]:
