@@ -424,6 +424,12 @@ async def upload_resume_and_update_profile(
         )
 
         # UPDATE PROFILE WITH PARSED DATA
+        # Validate gpa_scale - only accept valid values, otherwise set to None
+        raw_gpa_scale = parsed_result.get("gpa_scale")
+        valid_gpa_scale = None
+        if raw_gpa_scale in ["4.0", "5.0", "100"]:
+            valid_gpa_scale = raw_gpa_scale
+
         # Map parsed data to profile fields
         update_data = ProfileUpdate(
             state=parsed_result.get("state"),
@@ -432,7 +438,7 @@ async def upload_resume_and_update_profile(
             high_school_name=parsed_result.get("high_school_name"),
             graduation_year=parsed_result.get("graduation_year"),
             gpa=parsed_result.get("gpa"),
-            gpa_scale=parsed_result.get("gpa_scale"),
+            gpa_scale=valid_gpa_scale,  # Use validated value
             sat_score=parsed_result.get("sat_score"),
             act_score=parsed_result.get("act_score"),
             intended_major=parsed_result.get("intended_major"),
@@ -498,167 +504,3 @@ async def upload_resume_and_update_profile(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing resume: {str(e)}",
         )
-
-
-@router.delete("/me/resume")
-async def delete_resume(
-    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
-):
-    """Delete user's resume"""
-
-    user_id = current_user.id
-    user_profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
-
-    if not user_profile or not user_profile.resume_url:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="No resume found"
-        )
-
-    try:
-        # Extract path from URL
-        resume_url = user_profile.resume_url
-        file_path = resume_url.replace(settings.IMAGE_CDN_BASE_URL + "/", "")
-
-        # Delete from Spaces
-        spaces = DigitalOceanSpaces()
-        spaces.delete_file(file_path)
-
-        # Update database
-        user_profile.resume_url = None
-        db.commit()
-
-        return {"status": "success", "message": "Resume deleted successfully"}
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error deleting resume: {str(e)}",
-        )
-
-
-@router.patch("/me/gpa")
-async def update_gpa(
-    gpa: float,
-    gpa_scale: str = "4.0",
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Update user's GPA and return scholarship matches
-
-    Use this when user doesn't have GPA in their resume
-    """
-
-    # Validate GPA
-    if gpa < 0 or gpa > 5.0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="GPA must be between 0 and 5.0",
-        )
-
-    if gpa_scale not in ["4.0", "5.0", "100"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="GPA scale must be 4.0, 5.0, or 100",
-        )
-
-    # Update profile
-    profile_service = ProfileService(db)
-    update_data = ProfileUpdate(gpa=gpa, gpa_scale=gpa_scale)
-    profile = profile_service.update_profile(current_user.id, update_data)
-
-    if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found"
-        )
-
-    # Get scholarship matches
-    from app.services.scholarship import ScholarshipService
-
-    scholarship_service = ScholarshipService(db)
-    matches = scholarship_service.find_by_gpa(gpa=gpa, limit=10)
-
-    return {
-        "status": "success",
-        "message": "GPA updated successfully",
-        "profile": ProfileResponse.model_validate(profile),
-        "scholarship_matches": [
-            {
-                "id": s.id,
-                "title": s.title,
-                "organization": s.organization,
-                "amount_min": s.amount_min,
-                "amount_max": s.amount_max,
-                "deadline": str(s.deadline) if s.deadline else None,
-                "min_gpa": float(s.min_gpa) if s.min_gpa else None,
-                "website_url": s.website_url,
-            }
-            for s in matches
-        ],
-    }
-
-
-@router.get("/me/scholarship-matches")
-async def get_my_scholarship_matches(
-    limit: int = 20,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Get scholarship matches based on user's profile
-
-    Currently matches based on GPA only
-    Returns empty list if GPA not set
-    """
-
-    profile_service = ProfileService(db)
-    profile = profile_service.get_by_user_id(current_user.id)
-
-    if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Profile not found. Please create a profile first.",
-        )
-
-    # Check if GPA exists
-    if not profile.gpa:
-        return {
-            "status": "incomplete_profile",
-            "message": "Please add your GPA to see scholarship matches",
-            "needs_gpa": True,
-            "matches": [],
-        }
-
-    # Get scholarship matches
-    from app.services.scholarship import ScholarshipService
-
-    scholarship_service = ScholarshipService(db)
-    matches = scholarship_service.find_by_gpa(gpa=profile.gpa, limit=limit)
-
-    return {
-        "status": "success",
-        "message": f"Found {len(matches)} scholarship matches",
-        "needs_gpa": False,
-        "profile": {
-            "gpa": profile.gpa,
-            "gpa_scale": profile.gpa_scale,
-            "graduation_year": profile.graduation_year,
-            "intended_major": profile.intended_major,
-        },
-        "matches": [
-            {
-                "id": s.id,
-                "title": s.title,
-                "organization": s.organization,
-                "scholarship_type": s.scholarship_type,
-                "amount_min": s.amount_min,
-                "amount_max": s.amount_max,
-                "deadline": str(s.deadline) if s.deadline else None,
-                "min_gpa": float(s.min_gpa) if s.min_gpa else None,
-                "description": s.description,
-                "website_url": s.website_url,
-                "primary_image_url": s.primary_image_url,
-            }
-            for s in matches
-        ],
-    }
