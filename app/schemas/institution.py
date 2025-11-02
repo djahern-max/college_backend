@@ -14,9 +14,9 @@ from decimal import Decimal
 class ControlType(str, Enum):
     """Institution control types"""
 
-    PUBLIC = "public"
-    PRIVATE_NONPROFIT = "private_nonprofit"
-    PRIVATE_FOR_PROFIT = "private_for_profit"
+    PUBLIC = "PUBLIC"
+    PRIVATE_NONPROFIT = "PRIVATE_NONPROFIT"
+    PRIVATE_FOR_PROFIT = "PRIVATE_FOR_PROFIT"
 
 
 # ===========================
