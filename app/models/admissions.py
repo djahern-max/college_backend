@@ -72,40 +72,11 @@ class AdmissionsData(Base):
     )
     sat_math_75th = Column(Integer, nullable=True, comment="SAT Math 75th percentile")
 
-    # ACT scores (middle 50%)
-    act_composite_25th = Column(
-        Integer, nullable=True, comment="ACT Composite 25th percentile"
-    )
-    act_composite_50th = Column(
-        Integer,
-        nullable=True,
-        index=True,
-        comment="ACT Composite 50th percentile (median)",
-    )
-    act_composite_75th = Column(
-        Integer, nullable=True, comment="ACT Composite 75th percentile"
-    )
-
-    act_english_25th = Column(
-        Integer, nullable=True, comment="ACT English 25th percentile"
-    )
-    act_english_75th = Column(
-        Integer, nullable=True, comment="ACT English 75th percentile"
-    )
-
-    act_math_25th = Column(Integer, nullable=True, comment="ACT Math 25th percentile")
-    act_math_75th = Column(Integer, nullable=True, comment="ACT Math 75th percentile")
-
     # Test submission percentages
     percent_submitting_sat = Column(
         Numeric(5, 2),
         nullable=True,
         comment="Percentage of enrolled students who submitted SAT",
-    )
-    percent_submitting_act = Column(
-        Numeric(5, 2),
-        nullable=True,
-        comment="Percentage of enrolled students who submitted ACT",
     )
 
     # Metadata
@@ -114,12 +85,6 @@ class AdmissionsData(Base):
         server_default=text("now()"),
         nullable=False,
         comment="Record creation timestamp",
-    )
-    updated_at = Column(
-        DateTime,
-        server_default=text("now()"),
-        nullable=False,
-        comment="Record last update timestamp",
     )
 
     # Relationships

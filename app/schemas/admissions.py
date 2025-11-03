@@ -36,29 +36,9 @@ class AdmissionsDataBase(BaseModel):
     sat_math_50th: Optional[int] = Field(None, description="SAT Math median")
     sat_math_75th: Optional[int] = Field(None, description="SAT Math 75th percentile")
 
-    # ACT scores
-    act_composite_25th: Optional[int] = Field(
-        None, description="ACT Composite 25th percentile"
-    )
-    act_composite_50th: Optional[int] = Field(None, description="ACT Composite median")
-    act_composite_75th: Optional[int] = Field(
-        None, description="ACT Composite 75th percentile"
-    )
-    act_english_25th: Optional[int] = Field(
-        None, description="ACT English 25th percentile"
-    )
-    act_english_75th: Optional[int] = Field(
-        None, description="ACT English 75th percentile"
-    )
-    act_math_25th: Optional[int] = Field(None, description="ACT Math 25th percentile")
-    act_math_75th: Optional[int] = Field(None, description="ACT Math 75th percentile")
-
     # Test submission rates
     percent_submitting_sat: Optional[Decimal] = Field(
         None, description="% submitting SAT"
-    )
-    percent_submitting_act: Optional[Decimal] = Field(
-        None, description="% submitting ACT"
     )
 
 
