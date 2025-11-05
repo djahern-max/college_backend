@@ -5,6 +5,8 @@ from typing import List, Optional
 import os
 import shutil
 from pathlib import Path
+from typing import List, Dict, Any
+from app.models.institution import Institution
 
 from app.core.database import get_db
 from app.api.deps import get_current_user
@@ -74,32 +76,48 @@ async def update_my_profile(
     return profile
 
 
-@router.get("/me/matching-institutions", response_model=List[InstitutionResponse])
+from typing import Dict, Any
+
+
+@router.get("/me/matching-institutions")
 async def get_matching_institutions(
     limit: int = 50,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-):
+) -> Dict[str, Any]:
     """
     Get institutions matching user's location preference
-
-    Returns institutions in the state specified in user's location_preference field
+    Returns both institutions and total count
     """
     profile_service = ProfileService(db)
-    institutions = profile_service.find_matching_institutions(
-        user_id=current_user.id, limit=limit
+
+    # Get the profile first
+    profile = profile_service.get_by_user_id(current_user.id)
+
+    # If no profile or no location preference, return empty
+    if not profile or not profile.location_preference:
+        return {"institutions": [], "total": 0, "location_preference": None}
+
+    # Get ALL matching institutions (no limit) to count them
+    all_institutions = (
+        db.query(Institution)
+        .filter(Institution.state == profile.location_preference)
+        .order_by(Institution.name)
+        .all()
     )
 
-    if not institutions:
-        # Check if user has set a location preference
-        profile = profile_service.get_by_user_id(current_user.id)
-        if not profile or not profile.location_preference:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Please set your location_preference in your profile first",
-            )
+    total_count = len(all_institutions)
 
-    return institutions
+    # Return limited set for display
+    limited_institutions = all_institutions[:limit]
+
+    return {
+        "institutions": [
+            InstitutionResponse.model_validate(i) for i in limited_institutions
+        ],
+        "total": total_count,
+        "location_preference": profile.location_preference,
+    }
 
 
 # ===========================
@@ -211,126 +229,6 @@ async def upload_profile_image(
         )
 
 
-@router.post("/me/upload-resume", response_model=ResumeUploadResponse)
-async def upload_and_parse_resume(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Upload resume and automatically parse it to extract profile data
-
-    Accepts PDF or DOCX files up to 10MB
-    Returns parsed data that can be used to auto-fill the profile form
-    """
-
-    # Get user_id from User object
-    user_id = current_user.id
-
-    # Validate file type
-    file_extension = os.path.splitext(file.filename)[1].lower()
-    if file_extension not in settings.ALLOWED_RESUME_EXTENSIONS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid file type. Allowed types: {', '.join(settings.ALLOWED_RESUME_EXTENSIONS)}",
-        )
-
-    # Validate file size
-    file.file.seek(0, 2)
-    file_size = file.file.tell()
-    file.file.seek(0)
-
-    max_size_bytes = settings.MAX_RESUME_SIZE_MB * 1024 * 1024
-    if file_size > max_size_bytes:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File too large. Maximum size: {settings.MAX_RESUME_SIZE_MB}MB",
-        )
-
-    temp_file_path = None
-
-    try:
-        # Get or create user profile
-        user_profile = (
-            db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
-        )
-
-        # AUTO-CREATE PROFILE IF MISSING
-        if not user_profile:
-            profile_service = ProfileService(db)
-            user_profile = profile_service.create_profile(
-                user_id=user_id, profile_data=ProfileCreate()
-            )
-
-        # Create temp directory if it doesn't exist
-        temp_dir = Path(settings.TEMP_UPLOAD_DIR)
-        temp_dir.mkdir(parents=True, exist_ok=True)
-
-        # Save file temporarily
-        temp_file_path = temp_dir / f"resume_{user_id}{file_extension}"
-        with open(temp_file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
-        # Extract text from file
-        extractor = FileExtractor()
-        resume_text = extractor.extract_text(str(temp_file_path), file_extension)
-
-        if not resume_text or len(resume_text) < 100:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Could not extract sufficient text from resume. Please ensure the file is readable.",
-            )
-
-        # Parse resume with AI
-        parser = ResumeParser()
-        parsed_result = parser.parse_resume(resume_text)
-
-        # Extract metadata
-        metadata = parsed_result.pop("_metadata", {})
-
-        # Upload to Digital Ocean Spaces
-        spaces = DigitalOceanSpaces()
-        destination_path = spaces.generate_profile_path(user_id, "resume.pdf")
-        content_type = spaces.get_content_type(file.filename)
-
-        resume_url = spaces.upload_file(
-            str(temp_file_path),
-            destination_path,
-            content_type=content_type,
-            is_public=False,  # Keep resumes private
-        )
-
-        # Update user profile with resume URL
-        user_profile.resume_url = resume_url
-        db.commit()
-        db.refresh(user_profile)
-
-        # Clean up temp file
-        if temp_file_path and temp_file_path.exists():
-            os.remove(temp_file_path)
-
-        # Return parsed data
-        return ResumeUploadResponse(
-            resume_url=resume_url,
-            parsed_data=ParsedResumeData(**parsed_result),
-            metadata=ResumeParsingMetadata(**metadata),
-            message="Resume uploaded and parsed successfully. Review the data below and update your profile.",
-        )
-
-    except HTTPException:
-        if temp_file_path and temp_file_path.exists():
-            os.remove(temp_file_path)
-        raise
-    except Exception as e:
-        if temp_file_path and temp_file_path.exists():
-            os.remove(temp_file_path)
-
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing resume: {str(e)}",
-        )
-
-
 @router.post("/me/upload-resume-and-update", response_model=dict)
 async def upload_resume_and_update_profile(
     file: UploadFile = File(...),
@@ -427,7 +325,7 @@ async def upload_resume_and_update_profile(
         # Validate gpa_scale - only accept valid values, otherwise set to None
         raw_gpa_scale = parsed_result.get("gpa_scale")
         valid_gpa_scale = None
-        if raw_gpa_scale in ["4.0", "5.0", "100"]:
+        if raw_gpa_scale in ["4.0", "5.0", "100", "weighted", "unweighted"]:
             valid_gpa_scale = raw_gpa_scale
 
         # Map parsed data to profile fields
@@ -438,11 +336,18 @@ async def upload_resume_and_update_profile(
             high_school_name=parsed_result.get("high_school_name"),
             graduation_year=parsed_result.get("graduation_year"),
             gpa=parsed_result.get("gpa"),
-            gpa_scale=valid_gpa_scale,  # Use validated value
+            gpa_scale=valid_gpa_scale,
             sat_score=parsed_result.get("sat_score"),
             act_score=parsed_result.get("act_score"),
             intended_major=parsed_result.get("intended_major"),
             resume_url=resume_url,
+            # NEW FIELDS
+            career_goals=parsed_result.get("career_goals"),
+            volunteer_hours=parsed_result.get("volunteer_hours"),
+            extracurriculars=parsed_result.get("extracurriculars"),
+            work_experience=parsed_result.get("work_experience"),
+            honors_awards=parsed_result.get("honors_awards"),
+            skills=parsed_result.get("skills"),
         )
 
         # Update the profile

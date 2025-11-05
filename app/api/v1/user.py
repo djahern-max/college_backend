@@ -9,6 +9,7 @@ from app.services.user import UserService
 from app.schemas.auth import LoginResponse, LoginRequest
 from app.schemas.user import UserResponse, UserCreate
 from app.api.deps import get_current_user
+from app.models.user import User
 
 router = APIRouter()
 
@@ -110,18 +111,11 @@ async def login_with_json(
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_info(
-    current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),  # Changed from dict to User
 ):
     """Get current user info"""
-    user_service = UserService(db)
-    user = user_service.get_by_id(current_user["id"])
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
-
-    return UserResponse.model_validate(user)
+    # No need to query again - we already have the user object!
+    return UserResponse.model_validate(current_user)
 
 
 @router.post("/logout")

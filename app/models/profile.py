@@ -5,7 +5,7 @@ Reduced from 84 fields to 13 fields (85% reduction)
 No demographics - just academic basics
 """
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, ARRAY
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, ARRAY, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -37,10 +37,22 @@ class UserProfile(Base):
     high_school_name = Column(String(255), nullable=True)
     graduation_year = Column(Integer, nullable=True, index=True)
     gpa = Column(Float, nullable=True)
-    gpa_scale = Column(String(10), nullable=True)  # "4.0", "5.0", "100"
+    gpa_scale = Column(
+        String(20), nullable=True
+    )  # "4.0", "5.0", "100", "weighted", "unweighted"
     sat_score = Column(Integer, nullable=True)
     act_score = Column(Integer, nullable=True)
     intended_major = Column(String(255), nullable=True)
+
+    # ===========================
+    # CAREER & ACTIVITIES (5 fields) - NEW SECTION
+    # ===========================
+    career_goals = Column(String(500), nullable=True)
+    volunteer_hours = Column(Integer, nullable=True)
+    extracurriculars = Column(JSON, nullable=True)  # Array of activity objects
+    work_experience = Column(JSON, nullable=True)  # Array of experience objects
+    honors_awards = Column(ARRAY(String), nullable=True)  # Simple string array
+    skills = Column(ARRAY(String), nullable=True)  # Simple string array
 
     # ===========================
     # MATCHING CRITERIA (1 field)
@@ -49,6 +61,9 @@ class UserProfile(Base):
         String(2), nullable=True, index=True
     )  # State code: NH, CO, CA, etc.
 
+    # ===========================
+    # FILE UPLOADS (2 fields)
+    # ===========================
     profile_image_url = Column(String(500), nullable=True)
     resume_url = Column(String(500), nullable=True)
 
@@ -76,7 +91,7 @@ class UserProfile(Base):
     @property
     def completion_percentage(self) -> int:
         """Calculate profile completion percentage"""
-        total_fields = 10  # Core fields we care about
+        total_fields = 15  # Updated to include new optional fields
         filled_fields = sum(
             [
                 bool(self.state),
@@ -87,6 +102,12 @@ class UserProfile(Base):
                 bool(self.gpa_scale),
                 bool(self.sat_score or self.act_score),
                 bool(self.intended_major),
+                bool(self.career_goals),
+                bool(self.volunteer_hours),
+                bool(self.extracurriculars),
+                bool(self.work_experience),
+                bool(self.honors_awards),
+                bool(self.skills),
             ]
         )
         return int((filled_fields / total_fields) * 100)
