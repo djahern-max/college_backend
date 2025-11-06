@@ -48,8 +48,9 @@ class User(Base):
         cascade="all, delete-orphan",
     )
 
-    # REMOVED: institution_matches (table dropped)
-    # REMOVED: essays (table dropped)
+    scholarship_applications = relationship(
+        "ScholarshipApplication", back_populates="user", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return f"<User(id={self.id}, email='{self.email}', username='{self.username}')>"

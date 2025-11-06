@@ -1,6 +1,6 @@
 # app/models/__init__.py
 """
-UPDATED: Added new admissions, enrollment, and graduation models
+UPDATED: Added scholarship application tracking
 """
 
 from app.models.user import User
@@ -10,24 +10,26 @@ from app.models.scholarship import Scholarship
 from app.models.tuition import TuitionData
 from app.models.oauth import OAuthAccount, OAuthState
 
-# NEW IMPORTS
+# Admissions/Enrollment/Graduation
 from app.models.admissions import AdmissionsData
 from app.models.enrollment import EnrollmentData
 from app.models.graduation import GraduationData
+
+# NEW: Scholarship tracking
+from app.models.scholarship_applications import ScholarshipApplication
 
 
 __all__ = [
     "User",
     "UserProfile",
     "Institution",
-    # "InstitutionMatch",  # Commented out - was in __all__ but not imported
     "Scholarship",
     "TuitionData",
     "OAuthAccount",
     "OAuthState",
-    # "Essay",  # Commented out - was in __all__ but not imported
-    # NEW MODELS
     "AdmissionsData",
     "EnrollmentData",
     "GraduationData",
+    # NEW
+    "ScholarshipApplication",
 ]

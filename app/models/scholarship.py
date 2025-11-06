@@ -17,6 +17,7 @@ from sqlalchemy import (
 from sqlalchemy.sql import func
 from app.core.database import Base
 from enum import Enum
+from sqlalchemy.orm import relationship
 
 
 class ScholarshipType(str, Enum):
@@ -123,6 +124,8 @@ class Scholarship(Base):
     # ===========================
     created_at = Column(DateTime, default=func.now(), nullable=False)
     updated_at = Column(DateTime, onupdate=func.now())
+
+    applications = relationship("ScholarshipApplication", back_populates="scholarship")
 
     def __repr__(self):
         return f"<Scholarship(id={self.id}, title='{self.title}', amount=${self.amount_min}-${self.amount_max})>"
