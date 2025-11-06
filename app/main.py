@@ -10,6 +10,7 @@ from app.api.v1 import (
     profiles,
     costs,
     admissions,
+    scholarship_tracking,
 )
 from fastapi.routing import APIRoute
 from fastapi.responses import PlainTextResponse
@@ -44,6 +45,11 @@ app.include_router(
 app.include_router(profiles.router, prefix="/api/v1/profiles", tags=["Profiles"])
 app.include_router(costs.router, prefix="/api/v1/costs", tags=["Costs"])
 app.include_router(admissions.router, prefix="/api/v1/admissions", tags=["Admissions"])
+app.include_router(
+    scholarship_tracking.router,
+    prefix="/api/v1/scholarship-tracking",
+    tags=["Scholarship Tracking"],
+)
 
 
 @app.get("/")
