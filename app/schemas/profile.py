@@ -1,4 +1,4 @@
-# app/schemas/profile.py - CORRECTED VERSION
+# app/schemas/profile.py - UPDATED VERSION WITH EXTRACURRICULARS IN UPDATE
 
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any
@@ -52,7 +52,7 @@ class ProfileBase(BaseModel):
     act_score: Optional[int] = Field(None, ge=1, le=36)
     intended_major: Optional[str] = Field(None, max_length=255)
 
-    # Career & Activities - NEW FIELDS
+    # Career & Activities
     career_goals: Optional[str] = Field(None, max_length=500)
     volunteer_hours: Optional[int] = Field(None, ge=0)
     extracurriculars: Optional[List[Dict[str, Any]]] = None
@@ -67,25 +67,34 @@ class ProfileBase(BaseModel):
     profile_image_url: Optional[str] = Field(None, max_length=500)
     resume_url: Optional[str] = Field(None, max_length=500)
 
-    @field_validator("state", "location_preference")
-    @classmethod
-    def validate_state_codes(cls, v):
-        """Validate and uppercase state codes"""
-        if v:
-            return v.upper()
-        return v
-
 
 class ProfileCreate(ProfileBase):
-    """Schema for creating a new profile - inherits all fields from ProfileBase"""
+    """Schema for creating a new profile"""
 
     pass
 
 
 class ProfileUpdate(ProfileBase):
-    """Schema for updating a profile - all fields optional, inherits from ProfileBase"""
+    """
+    Schema for updating a profile - all fields optional, inherits from ProfileBase
+
+    IMPORTANT: Now includes extracurriculars, work_experience, honors_awards, and skills
+    so users can manually edit these fields even if not parsed from resume.
+    """
 
     pass
+
+
+class ProfileSimple(BaseModel):
+    """Simplified profile response without nested relationships"""
+
+    id: int
+    user_id: int
+    state: Optional[str] = None
+    city: Optional[str] = None
+    graduation_year: Optional[int] = None
+    gpa: Optional[float] = None
+    location_preference: Optional[str] = None
 
 
 class ProfileResponse(ProfileBase):
@@ -96,18 +105,5 @@ class ProfileResponse(ProfileBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    model_config = {"from_attributes": True}
-
-
-class ProfileSimple(BaseModel):
-    """Simplified profile for listings"""
-
-    id: int
-    user_id: int
-    state: Optional[str] = None
-    graduation_year: Optional[int] = None
-    gpa: Optional[float] = None
-    intended_major: Optional[str] = None
-    location_preference: Optional[str] = None
-
-    model_config = {"from_attributes": True}
+    class Config:
+        from_attributes = True

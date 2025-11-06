@@ -8,6 +8,7 @@ from botocore.exceptions import ClientError
 from typing import Optional
 import logging
 import os
+import time
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -92,13 +93,23 @@ class DigitalOceanSpaces:
         """
         Generate standardized path for user profile files
 
+        For headshots, adds a timestamp to ensure uniqueness and prevent
+        caching/overwrite issues across different users.
+
         Args:
             user_id: User's ID
             filename: Name of the file (e.g., 'resume.pdf', 'headshot.jpg')
 
         Returns:
-            Path in bucket (e.g., 'profiles/123/resume.pdf')
+            Path in bucket (e.g., 'profiles/123/headshot_1699000000.jpg')
         """
+        # For headshots, add timestamp to ensure uniqueness
+        if filename.startswith("headshot"):
+            timestamp = int(time.time())
+            # Extract extension
+            extension = filename.split(".")[-1] if "." in filename else "jpg"
+            filename = f"headshot_{timestamp}.{extension}"
+
         return f"profiles/{user_id}/{filename}"
 
     def get_content_type(self, filename: str) -> str:
