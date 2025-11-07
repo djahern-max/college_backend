@@ -18,6 +18,8 @@ from app.models.graduation import GraduationData
 # NEW: Scholarship tracking
 from app.models.scholarship_applications import ScholarshipApplication
 
+from app.models.college_applications import CollegeApplication
+
 
 __all__ = [
     "User",
@@ -32,4 +34,5 @@ __all__ = [
     "GraduationData",
     # NEW
     "ScholarshipApplication",
+    "CollegeApplication",
 ]

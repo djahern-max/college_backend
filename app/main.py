@@ -11,6 +11,7 @@ from app.api.v1 import (
     costs,
     admissions,
     scholarship_tracking,
+    college_tracking,
 )
 from fastapi.routing import APIRoute
 from fastapi.responses import PlainTextResponse
@@ -49,6 +50,11 @@ app.include_router(
     scholarship_tracking.router,
     prefix="/api/v1/scholarship-tracking",
     tags=["Scholarship Tracking"],
+)
+app.include_router(
+    college_tracking.router,
+    prefix="/api/v1/college-tracking",
+    tags=["College Application Tracking"],
 )
 
 
