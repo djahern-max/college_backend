@@ -1,6 +1,7 @@
 # app/models/college_applications.py
 """
 Database model for college application tracking
+FIXED: Added explicit enum names to avoid conflicts with scholarship tracking
 """
 
 from sqlalchemy import Column, Integer, ForeignKey, DateTime, Text, Boolean, Date, Index
@@ -54,13 +55,20 @@ class CollegeApplication(Base):
 
     # Application Details
     status = Column(
-        SQLEnum(ApplicationStatus),
+        SQLEnum(
+            ApplicationStatus, name="applicationstatus_college"
+        ),  # ← FIXED: Added explicit name
         default=ApplicationStatus.RESEARCHING,
         nullable=False,
         index=True,
     )
 
-    application_type = Column(SQLEnum(ApplicationType), nullable=True)
+    application_type = Column(
+        SQLEnum(
+            ApplicationType, name="applicationtype_college"
+        ),  # ← FIXED: Added explicit name
+        nullable=True,
+    )
 
     # Dates
     deadline = Column(Date, nullable=True, index=True)

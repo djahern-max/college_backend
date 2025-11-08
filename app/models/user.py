@@ -52,7 +52,7 @@ class User(Base):
         "ScholarshipApplication", back_populates="user", cascade="all, delete-orphan"
     )
 
-    ccollege_applications = relationship("CollegeApplication", back_populates="user")
+    college_applications = relationship("CollegeApplication", back_populates="user")
 
     def __repr__(self):
         return f"<User(id={self.id}, email='{self.email}', username='{self.username}')>"
