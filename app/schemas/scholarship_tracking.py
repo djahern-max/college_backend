@@ -4,8 +4,8 @@ Schemas for scholarship application tracking
 """
 
 from pydantic import BaseModel
-from typing import Optional, List
-from datetime import datetime
+from typing import Optional, List, Union
+from datetime import datetime, date
 from enum import Enum
 
 
@@ -62,10 +62,13 @@ class ScholarshipBasicInfo(BaseModel):
     organization: str
     amount_min: Optional[int]
     amount_max: Optional[int]
-    deadline: Optional[str]
+    deadline: Optional[Union[str, date]] = None  # Accept both str and date
 
     class Config:
         from_attributes = True
+        json_encoders = {
+            date: lambda v: v.isoformat() if v else None  # Convert date to string
+        }
 
 
 class ScholarshipApplicationResponse(BaseModel):
@@ -95,9 +98,13 @@ class DashboardSummary(BaseModel):
     """Summary statistics for dashboard"""
 
     total_applications: int
-    submitted: int
+    interested: int  # NEW - count of interested status
+    planning: int  # NEW - count of planning status
     in_progress: int
+    submitted: int
     accepted: int
+    rejected: int  # NEW - count of rejected status
+    not_pursuing: int  # NEW - count of not_pursuing status
     total_potential_value: int
     total_awarded_value: int
 

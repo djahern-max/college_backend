@@ -251,20 +251,33 @@ class ScholarshipTrackingService:
     # ===========================
     # PRIVATE HELPER METHODS
     # ===========================
-
     def _calculate_summary(
         self, applications: List[ScholarshipApplication]
     ) -> Dict[str, int]:
-        """Calculate summary statistics"""
+        """Calculate summary statistics - UPDATED to include all status counts"""
         total = len(applications)
-        submitted = len(
-            [a for a in applications if a.status == ApplicationStatus.SUBMITTED]
+
+        # Count each status type
+        interested = len(
+            [a for a in applications if a.status == ApplicationStatus.INTERESTED]
+        )
+        planning = len(
+            [a for a in applications if a.status == ApplicationStatus.PLANNING]
         )
         in_progress = len(
             [a for a in applications if a.status == ApplicationStatus.IN_PROGRESS]
         )
+        submitted = len(
+            [a for a in applications if a.status == ApplicationStatus.SUBMITTED]
+        )
         accepted = len(
             [a for a in applications if a.status == ApplicationStatus.ACCEPTED]
+        )
+        rejected = len(
+            [a for a in applications if a.status == ApplicationStatus.REJECTED]
+        )
+        not_pursuing = len(
+            [a for a in applications if a.status == ApplicationStatus.NOT_PURSUING]
         )
 
         # Calculate potential value (for active applications)
@@ -288,11 +301,16 @@ class ScholarshipTrackingService:
             if app.status == ApplicationStatus.ACCEPTED
         )
 
+        # UPDATED: Return dictionary now includes all status counts
         return {
             "total_applications": total,
-            "submitted": submitted,
+            "interested": interested,  # NEW
+            "planning": planning,  # NEW
             "in_progress": in_progress,
+            "submitted": submitted,
             "accepted": accepted,
+            "rejected": rejected,  # NEW
+            "not_pursuing": not_pursuing,  # NEW
             "total_potential_value": total_potential,
             "total_awarded_value": total_awarded,
         }
