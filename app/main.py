@@ -20,7 +20,7 @@ from fastapi.responses import PlainTextResponse
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="CampusConnect - Scholarship matching platform",
+    description="MagicScholar API",
 )
 
 # Configure CORS
