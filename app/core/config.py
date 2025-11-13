@@ -58,6 +58,7 @@ class Settings(BaseSettings):
             return [
                 "https://magicscholar.com",
                 "https://www.magicscholar.com",
+                "https://app.magicscholar.com",
             ]
         elif self.ENVIRONMENT == "staging":
             return ["https://staging.magicscholar.com", "http://localhost:3000"]
@@ -68,7 +69,12 @@ class Settings(BaseSettings):
     @property
     def FRONTEND_URL(self) -> str:
         if self.ENVIRONMENT == "production":
-            return "https://www.magicscholar.com"
+            # Use API_DOMAIN from .env for production
+            return (
+                f"https://{self.API_DOMAIN}"
+                if self.API_DOMAIN
+                else "https://app.magicscholar.com"
+            )
         elif self.ENVIRONMENT == "staging":
             return "https://staging.magicscholar.com"
         else:  # development
@@ -78,7 +84,12 @@ class Settings(BaseSettings):
     @property
     def API_BASE_URL(self) -> str:
         if self.ENVIRONMENT == "production":
-            return "https://www.magicscholar.com"
+            # Use API_DOMAIN from .env for production
+            return (
+                f"https://{self.API_DOMAIN}"
+                if self.API_DOMAIN
+                else "https://app.magicscholar.com"
+            )
         elif self.ENVIRONMENT == "staging":
             return "https://staging.magicscholar.com"
         else:  # development
