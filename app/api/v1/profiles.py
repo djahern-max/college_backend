@@ -160,6 +160,8 @@ async def update_user_settings(
         "confetti_enabled": false
     }
     """
+    from sqlalchemy.orm.attributes import flag_modified
+
     profile = (
         db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
     )
@@ -175,6 +177,10 @@ async def update_user_settings(
 
     # Update profile with new settings
     profile.settings = current_settings
+
+    # CRITICAL: Mark the JSONB field as modified so SQLAlchemy knows to update it
+    flag_modified(profile, "settings")
+
     db.commit()
     db.refresh(profile)
 
