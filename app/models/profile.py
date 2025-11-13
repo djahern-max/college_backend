@@ -1,13 +1,15 @@
-# app/models/profile.py - MINIMAL VERSION
+# app/models/profile.py - MINIMAL VERSION WITH SETTINGS
 """
 Ultra-simplified profile model - only core essentials
 Reduced from 84 fields to 13 fields (85% reduction)
 No demographics - just academic basics
+NOW WITH SETTINGS SUPPORT
 """
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, ARRAY, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from sqlalchemy.dialects.postgresql import JSONB
 from app.core.database import Base
 
 
@@ -68,6 +70,13 @@ class UserProfile(Base):
     resume_url = Column(String(500), nullable=True)
 
     # ===========================
+    # USER SETTINGS (1 field) - NEW
+    # ===========================
+    settings = Column(
+        JSONB, nullable=True, server_default='{"confetti_enabled": true}'
+    )  # User preferences stored as JSON
+
+    # ===========================
     # TIMESTAMPS (2 fields)
     # ===========================
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
@@ -111,3 +120,11 @@ class UserProfile(Base):
             ]
         )
         return int((filled_fields / total_fields) * 100)
+
+    @property
+    def user_settings(self) -> dict:
+        """Get user settings with defaults"""
+        default_settings = {"confetti_enabled": True}
+        if self.settings:
+            return {**default_settings, **self.settings}
+        return default_settings

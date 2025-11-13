@@ -1,4 +1,4 @@
-# app/api/v1/profiles.py - WORKS WITH USER OBJECTS
+# app/api/v1/profiles.py - WORKS WITH USER OBJECTS + SETTINGS SUPPORT
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -16,6 +16,7 @@ from app.schemas.profile import (
     ProfileResponse,
     ProfileSimple,
     ProfileCreate,
+    SettingsUpdate,
 )
 from app.schemas.institution import InstitutionResponse
 from app.services.resume_parser import ResumeParser
@@ -76,9 +77,6 @@ async def update_my_profile(
     return profile
 
 
-from typing import Dict, Any
-
-
 @router.get("/me/matching-institutions")
 async def get_matching_institutions(
     limit: int = 50,
@@ -118,6 +116,69 @@ async def get_matching_institutions(
         "total": total_count,
         "location_preference": profile.location_preference,
     }
+
+
+# ===========================
+# SETTINGS ENDPOINTS
+# ===========================
+
+
+@router.get("/me/settings", response_model=Dict[str, Any])
+async def get_user_settings(
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    """
+    Get user settings
+
+    Returns user preference settings like confetti_enabled
+    """
+    profile = (
+        db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+    )
+
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    # Return settings with defaults if not set
+    return profile.settings or {"confetti_enabled": True}
+
+
+@router.patch("/me/settings", response_model=Dict[str, Any])
+async def update_user_settings(
+    settings_update: Dict[str, Any],
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Update user settings
+
+    Currently supports:
+    - confetti_enabled: bool
+
+    Example request body:
+    {
+        "confetti_enabled": false
+    }
+    """
+    profile = (
+        db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+    )
+
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    # Get existing settings or initialize with defaults
+    current_settings = profile.settings or {"confetti_enabled": True}
+
+    # Update only provided settings (partial update)
+    current_settings.update(settings_update)
+
+    # Update profile with new settings
+    profile.settings = current_settings
+    db.commit()
+    db.refresh(profile)
+
+    return {"message": "Settings updated successfully", "settings": profile.settings}
 
 
 # ===========================

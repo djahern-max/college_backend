@@ -1,4 +1,4 @@
-# app/schemas/profile.py - UPDATED VERSION WITH EXTRACURRICULARS IN UPDATE
+# app/schemas/profile.py - UPDATED VERSION WITH SETTINGS
 
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any
@@ -26,6 +26,15 @@ class WorkExperience(BaseModel):
     organization: str
     dates: Optional[str] = None
     description: Optional[str] = None
+
+
+class UserSettings(BaseModel):
+    """User preference settings"""
+
+    confetti_enabled: bool = True
+    # Add more settings here as needed in the future
+    # email_notifications: bool = True
+    # dark_mode: bool = False
 
 
 # ===========================
@@ -82,7 +91,8 @@ class ProfileUpdate(ProfileBase):
     so users can manually edit these fields even if not parsed from resume.
     """
 
-    pass
+    # Settings - allow updating settings through profile update
+    settings: Optional[Dict[str, Any]] = None
 
 
 class ProfileSimple(BaseModel):
@@ -105,5 +115,22 @@ class ProfileResponse(ProfileBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
+    # Settings - always return with default if not set
+    settings: Dict[str, Any] = Field(default_factory=lambda: {"confetti_enabled": True})
+
     class Config:
         from_attributes = True
+
+
+# ===========================
+# SETTINGS-SPECIFIC SCHEMAS
+# ===========================
+
+
+class SettingsUpdate(BaseModel):
+    """Schema for updating user settings only"""
+
+    confetti_enabled: Optional[bool] = None
+
+    class Config:
+        json_schema_extra = {"example": {"confetti_enabled": False}}
