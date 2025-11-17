@@ -63,7 +63,12 @@ class Settings(BaseSettings):
         elif self.ENVIRONMENT == "staging":
             return ["https://staging.magicscholar.com", "http://localhost:3000"]
         else:  # development
-            return ["http://localhost:3000", "http://127.0.0.1:3000"]
+            return [
+                "http://localhost:3000",
+                "http://127.0.0.1:3001",
+                "http://127.0.0.1:3000",
+                "http://127.0.0.1:3001",
+            ]
 
     # Frontend URL - Dynamic based on environment
     @property

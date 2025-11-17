@@ -1,8 +1,7 @@
 # app/models/institution.py
 """
 UPDATED Institution model - added IPEDS enrichment fields
-Added: student_faculty_ratio, size_category, locale
-Added: relationships to admissions_data, enrollment_data, graduation_data
+FIXED: Specify foreign_keys for relationships to avoid ambiguity
 """
 
 from sqlalchemy import (
@@ -61,7 +60,7 @@ class Institution(Base):
     primary_image_url = Column(String(500), nullable=True)
 
     # ===========================
-    # NEW: STATIC INSTITUTIONAL CHARACTERISTICS
+    # STATIC INSTITUTIONAL CHARACTERISTICS
     # ===========================
     student_faculty_ratio = Column(
         Numeric(5, 2),
@@ -92,23 +91,28 @@ class Institution(Base):
     )
 
     # ===========================
-    # RELATIONSHIPS
+    # RELATIONSHIPS - FIXED to specify foreign_keys
     # ===========================
 
-    # Existing relationship
+    # Tuition data - use institution_id as primary relationship
     tuition_data = relationship(
-        "TuitionData", back_populates="institution", cascade="all, delete-orphan"
+        "TuitionData",
+        back_populates="institution",
+        cascade="all, delete-orphan",
+        foreign_keys="[TuitionData.institution_id]",  # FIXED: Specify which FK to use
     )
 
-    # NEW: Relationships to enrichment data tables
+    # Admissions data - use institution_id as primary relationship
     admissions_data = relationship(
         "AdmissionsData",
         back_populates="institution",
         cascade="all, delete-orphan",
         order_by="AdmissionsData.academic_year.desc()",
-        lazy="select",  # Only load when explicitly accessed
+        lazy="select",
+        foreign_keys="[AdmissionsData.institution_id]",  # FIXED: Specify which FK to use
     )
 
+    # Enrollment data
     enrollment_data = relationship(
         "EnrollmentData",
         back_populates="institution",
@@ -117,6 +121,7 @@ class Institution(Base):
         lazy="select",
     )
 
+    # Graduation data
     graduation_data = relationship(
         "GraduationData",
         back_populates="institution",
@@ -146,7 +151,7 @@ class Institution(Base):
             ControlType.PRIVATE_FOR_PROFIT,
         ]
 
-    # NEW: Convenience properties for latest data
+    # Convenience properties for latest data
     @property
     def latest_admissions(self):
         """Get most recent admissions data"""
@@ -182,7 +187,7 @@ class Institution(Base):
     def get_by_size(
         cls, db: Session, size_category: str, limit: int = 50
     ) -> List["Institution"]:
-        """Get institutions by"""
+        """Get institutions by size"""
         return (
             db.query(cls)
             .filter(cls.size_category == size_category)
@@ -194,22 +199,7 @@ class Institution(Base):
     # ===========================
     # TABLE INDEXES
     # ===========================
-    __table_args__ = (
-        Index("idx_institution_state_city", "state", "city"),
-        # Indexes on new columns are created via Column definition
-    )
+    __table_args__ = (Index("idx_institution_state_city", "state", "city"),)
 
     def __repr__(self):
         return f"<Institution(id={self.id}, name='{self.name}', state='{self.state}')>"
-
-
-# ===========================
-# MIGRATION NOTE
-# ===========================
-"""
-After updating this file, run:
-1. alembic revision --autogenerate -m "add ipeds enrichment fields"
-2. alembic upgrade head
-
-Or use the provided migration file: add_ipeds_enrichment_data.py
-"""
