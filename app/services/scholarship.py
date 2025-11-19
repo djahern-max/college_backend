@@ -219,9 +219,9 @@ class ScholarshipService:
             # Handle NULL values in deadline sorting by putting them last
             if sort_field == "deadline":
                 if filters.sort_order == "desc":
-                    query = query.order_by(desc(sort_column.nullslast()))
+                    query = query.order_by(sort_column.desc().nullslast())
                 else:
-                    query = query.order_by(asc(sort_column.nullslast()))
+                    query = query.order_by(sort_column.asc().nullslast())
             else:
                 if filters.sort_order == "desc":
                     query = query.order_by(desc(sort_column))

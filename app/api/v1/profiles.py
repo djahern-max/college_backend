@@ -127,19 +127,18 @@ async def get_matching_institutions(
 async def get_user_settings(
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    """
-    Get user settings
-
-    Returns user preference settings like confetti_enabled
-    """
+    """Get user settings - auto-creates profile if missing"""
     profile = (
         db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
     )
 
+    # AUTO-CREATE PROFILE IF MISSING (like other endpoints do)
     if not profile:
-        raise HTTPException(status_code=404, detail="Profile not found")
+        profile_service = ProfileService(db)
+        profile = profile_service.create_profile(
+            user_id=current_user.id, profile_data=ProfileCreate()
+        )
 
-    # Return settings with defaults if not set
     return profile.settings or {"confetti_enabled": True}
 
 
