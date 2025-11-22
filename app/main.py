@@ -12,6 +12,7 @@ from app.api.v1 import (
     admissions,
     scholarship_tracking,
     college_tracking,
+    public_gallery,
 )
 from fastapi.routing import APIRoute
 from fastapi.responses import PlainTextResponse
@@ -55,6 +56,9 @@ app.include_router(
     college_tracking.router,
     prefix="/api/v1/college-tracking",
     tags=["College Application Tracking"],
+)
+app.include_router(
+    public_gallery.router, prefix="/api/v1/public-gallery", tags=["Public Gallery"]
 )
 
 

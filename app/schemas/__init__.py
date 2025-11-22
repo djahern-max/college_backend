@@ -24,6 +24,9 @@ from app.schemas.institution import (
     GraduationSummary,
 )
 
+# CampusConnect images
+from app.schemas.entity_image import EntityImageResponse
+
 __all__ = [
     # Institution schemas
     "InstitutionBase",
@@ -39,4 +42,6 @@ __all__ = [
     "AdmissionsSummary",
     "EnrollmentSummary",
     "GraduationSummary",
+    # Entity image schema
+    "EntityImageResponse",
 ]

@@ -20,6 +20,10 @@ from app.models.scholarship_applications import ScholarshipApplication
 
 from app.models.college_applications import CollegeApplication
 
+# CampusConnect images
+
+from app.models.entity_image import EntityImage
+
 
 __all__ = [
     "User",
@@ -32,7 +36,7 @@ __all__ = [
     "AdmissionsData",
     "EnrollmentData",
     "GraduationData",
-    # NEW
     "ScholarshipApplication",
     "CollegeApplication",
+    "EntityImage",
 ]
