@@ -1,64 +1,91 @@
+# alembic/env.py for MagicScholar
+# This tells Alembic to IGNORE CampusConnect tables (not drop them)
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 import os
 import sys
 
-# Add your project directory to Python path
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+# Add parent directory to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-# Import your database configuration
+# Import Base
 from app.core.database import Base
-from app.core.config import settings
 
-# Import ALL your models here so they're registered with SQLAlchemy
+# Import ALL MagicScholar models (including shared models)
 from app.models.user import User
 from app.models.profile import UserProfile
-from app.models.oauth import OAuthAccount, OAuthState
-
-# Add scholarship models when created
+from app.models.institution import Institution
 from app.models.scholarship import Scholarship
+from app.models.tuition import TuitionData
+from app.models.oauth import OAuthAccount, OAuthState
+from app.models.admissions import AdmissionsData
+from app.models.enrollment import EnrollmentData
+from app.models.graduation import GraduationData
+from app.models.scholarship_applications import ScholarshipApplication
+from app.models.college_applications import CollegeApplication
+from app.models.entity_image import EntityImage
 
-# this is the Alembic Config object, which provides
-# access to the values within the .ini file in use.
 config = context.config
-
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Set the SQLAlchemy URL from your settings
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
-
-# add your model's MetaData object here
-# for 'autogenerate' support
 target_metadata = Base.metadata
 
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
+
+def include_object(object, name, type_, reflected, compare_to):
+    """
+    Control which database objects Alembic should manage.
+
+    - Exclude alembic_version table
+    - IGNORE (don't drop) CampusConnect-specific tables that exist in unified_db
+    """
+    # Always exclude alembic_version
+    if type_ == "table" and name == "alembic_version":
+        return False
+
+    # CampusConnect tables that MagicScholar should IGNORE
+    # These exist in unified_db but are managed by CampusConnect
+    campusconnect_tables = {
+        "admin_users",
+        "invitation_codes",
+        "subscriptions",
+        "display_settings",
+        "contact_inquiries",
+        "outreach_activities",
+        "outreach_tracking",
+        "message_templates",
+    }
+
+    if type_ == "table" and name in campusconnect_tables:
+        # If compare_to is None, it means the table exists in DB but not in our models
+        # We want to IGNORE it (return False) so Alembic doesn't try to drop it
+        return False
+
+    # For indexes and constraints on CampusConnect tables
+    if type_ in ("index", "unique_constraint", "foreign_key"):
+        # Get the table name from the object
+        table_name = None
+        if hasattr(object, "table"):
+            table_name = object.table.name
+        elif hasattr(object, "parent"):
+            table_name = object.parent.name
+
+        if table_name in campusconnect_tables:
+            return False
+
+    return True
 
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode.
-
-    This configures the context with just a URL
-    and not an Engine, though an Engine is acceptable
-    here as well.  By skipping the Engine creation
-    we don't even need a DBAPI to be available.
-
-    Calls to context.execute() here emit the given string to the
-    script output.
-
-    """
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
-        dialect_opts={"paramstyle": "named"},
+        dialect_opts={"paramstypes": "named"},
+        include_object=include_object,
+        compare_type=True,
     )
 
     with context.begin_transaction():
@@ -66,12 +93,6 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode.
-
-    In this scenario we need to create an Engine
-    and associate a connection with the context.
-
-    """
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
@@ -79,7 +100,12 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            include_object=include_object,
+            compare_type=True,
+        )
 
         with context.begin_transaction():
             context.run_migrations()
