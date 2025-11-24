@@ -1,7 +1,6 @@
 # app/core/config.py
 from pydantic_settings import BaseSettings
 from typing import List
-import os
 from dotenv import load_dotenv
 from pydantic import validator
 
@@ -16,7 +15,12 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"  # development, staging, production
 
     # Database
-    DATABASE_URL: str = "postgresql://username:password@localhost:5432/magicscholar_db"
+    # NOTE:
+    # - This is just a DEFAULT.
+    # - .env (DATABASE_URL=...) will override this in all environments.
+    # - For local dev, your .env currently points to unified_db:
+    #   DATABASE_URL=postgresql://postgres:postgres@localhost:5432/unified_db
+    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/unified_db"
     DB_PASSWORD: str = ""
 
     # Security
@@ -33,7 +37,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379"
     REDIS_PASSWORD: str = ""
 
-    # Digital Ocean Spaces Configuration - Using your existing variable names
+    # Digital Ocean Spaces Configuration
     DIGITAL_OCEAN_SPACES_ACCESS_KEY: str = ""
     DIGITAL_OCEAN_SPACES_SECRET_KEY: str = ""
     DIGITAL_OCEAN_SPACES_ENDPOINT: str = ""
@@ -48,8 +52,26 @@ class Settings(BaseSettings):
 
     ANTHROPIC_API_KEY: str = ""
 
-    class Config:
-        env_file = ".env"
+    # OAuth Settings
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+
+    LINKEDIN_CLIENT_ID: str = ""
+    LINKEDIN_CLIENT_SECRET: str = ""
+
+    @validator("GOOGLE_CLIENT_ID")
+    def validate_google_config(cls, v, values):
+        environment = values.get("ENVIRONMENT", "development")
+        if environment == "production" and not v:
+            raise ValueError("GOOGLE_CLIENT_ID is required in production")
+        return v
+
+    @validator("LINKEDIN_CLIENT_ID")
+    def validate_linkedin_config(cls, v, values):
+        environment = values.get("ENVIRONMENT", "development")
+        if environment == "production" and not v:
+            raise ValueError("LINKEDIN_CLIENT_ID is required in production")
+        return v
 
     # CORS - Dynamic based on environment
     @property
@@ -99,36 +121,6 @@ class Settings(BaseSettings):
             return "https://staging.magicscholar.com"
         else:  # development
             return "http://localhost:8000"
-
-    # OAuth Settings
-    GOOGLE_CLIENT_ID: str = ""
-    GOOGLE_CLIENT_SECRET: str = ""
-
-    LINKEDIN_CLIENT_ID: str = ""
-    LINKEDIN_CLIENT_SECRET: str = ""
-
-    @validator("GOOGLE_CLIENT_ID")
-    def validate_google_config(cls, v, values):
-        environment = values.get("ENVIRONMENT", "development")
-        if environment == "production" and not v:
-            raise ValueError("GOOGLE_CLIENT_ID is required in production")
-        return v
-
-    @validator("LINKEDIN_CLIENT_ID")
-    def validate_linkedin_config(cls, v, values):
-        environment = values.get("ENVIRONMENT", "development")
-        if environment == "production" and not v:
-            raise ValueError("LINKEDIN_CLIENT_ID is required in production")
-        return v
-
-    # OAuth Redirect URIs - Dynamic based on environment
-    @property
-    def GOOGLE_REDIRECT_URI(self) -> str:
-        return f"{self.API_BASE_URL}/api/v1/oauth/google/callback"
-
-    @property
-    def LINKEDIN_REDIRECT_URI(self) -> str:
-        return f"{self.API_BASE_URL}/api/v1/oauth/linkedin/callback"
 
     class Config:
         case_sensitive = True

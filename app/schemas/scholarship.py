@@ -10,35 +10,7 @@ from datetime import datetime, date
 from decimal import Decimal
 from enum import Enum
 
-
-class ScholarshipType(str, Enum):
-    """Types of scholarships - matches UI filter categories"""
-
-    ACADEMIC_MERIT = "academic_merit"
-    NEED_BASED = "need_based"
-    STEM = "stem"
-    ARTS = "arts"
-    DIVERSITY = "diversity"
-    ATHLETIC = "athletic"
-    LEADERSHIP = "leadership"
-    MILITARY = "military"
-    CAREER_SPECIFIC = "career_specific"
-    OTHER = "other"
-
-
-class ScholarshipStatus(str, Enum):
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    EXPIRED = "expired"
-    DRAFT = "draft"
-    PENDING_REVIEW = "pending_review"
-
-
-class DifficultyLevel(str, Enum):
-    EASY = "easy"
-    MODERATE = "moderate"
-    HARD = "hard"
-    VERY_HARD = "very_hard"
+from app.models.scholarship import ScholarshipType, ScholarshipStatus, DifficultyLevel
 
 
 # ===========================

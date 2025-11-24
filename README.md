@@ -278,7 +278,7 @@ CORS_ORIGINS=["http://localhost:3000"]
 5. **Set up test database**
 ```bash
 # Create test database
-createdb magicscholar_test
+createdb unified_test
 
 # Copy test environment
 cp .env.test.example .env.test
