@@ -1,22 +1,28 @@
-# app/schemas/entity_image.py
+"""
+Schemas for entity images (gallery).
+Used for API responses when displaying institution/scholarship galleries.
+"""
 from pydantic import BaseModel
-from typing import Optional, Literal
+from typing import Optional
 from datetime import datetime
 
 
-class EntityImageResponse(BaseModel):
-    """Schema for entity image responses - READ ONLY"""
+class EntityImageBase(BaseModel):
+    """Base schema for entity images"""
+    caption: Optional[str] = None
+    image_type: Optional[str] = None
 
+
+class EntityImageResponse(EntityImageBase):
+    """Schema for entity image responses"""
     id: int
     entity_type: str
     entity_id: int
     image_url: str
     cdn_url: str
     filename: str
-    caption: Optional[str] = None
     display_order: int
     is_featured: bool
-    image_type: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 

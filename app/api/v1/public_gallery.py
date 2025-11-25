@@ -1,183 +1,171 @@
-# app/api/v1/public_gallery.py
 """
-Public endpoints for gallery images.
-READ-ONLY - Images are managed in CampusConnect
+Public gallery endpoints for MagicScholar.
+Displays gallery images from the unified database (managed by Abacadaba).
 """
+
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy.orm import Session
+from sqlalchemy import and_
 from typing import List, Optional
 from app.core.database import get_db
 from app.models.entity_image import EntityImage
+from app.models.institution import Institution
 from app.schemas.entity_image import EntityImageResponse
 
-router = APIRouter(prefix="/public/gallery", tags=["public-gallery"])
+router = APIRouter(tags=["gallery"])
 
 
 @router.get(
-    "/institutions/{institution_id}/gallery", response_model=List[EntityImageResponse]
+    "/institutions/{institution_id}/images", response_model=List[EntityImageResponse]
 )
-async def get_institution_gallery(
-    institution_id: int, db: AsyncSession = Depends(get_db)
-):
-    """Get gallery images for a specific institution"""
-    query = (
-        select(EntityImage)
-        .where(
+def get_institution_gallery(institution_id: int, db: Session = Depends(get_db)):
+    """
+    Get all gallery images for an institution.
+    PUBLIC endpoint - no authentication required.
+    """
+    images = (
+        db.query(EntityImage)
+        .filter(
             and_(
                 EntityImage.entity_type == "institution",
                 EntityImage.entity_id == institution_id,
             )
         )
         .order_by(EntityImage.display_order, EntityImage.created_at)
+        .all()
     )
-
-    result = await db.execute(query)
-    images = result.scalars().all()
 
     return images
 
 
 @router.get(
-    "/institutions/{institution_id}/featured-image",
+    "/institutions/{institution_id}/featured",
     response_model=Optional[EntityImageResponse],
 )
-async def get_institution_featured_image(
-    institution_id: int, db: AsyncSession = Depends(get_db)
-):
-    """Get the featured/primary image for an institution"""
-    query = select(EntityImage).where(
-        and_(
-            EntityImage.entity_type == "institution",
-            EntityImage.entity_id == institution_id,
-            EntityImage.is_featured == True,
+def get_institution_featured_image(institution_id: int, db: Session = Depends(get_db)):
+    """
+    Get the featured/primary image for an institution.
+    PUBLIC endpoint.
+    """
+    image = (
+        db.query(EntityImage)
+        .filter(
+            and_(
+                EntityImage.entity_type == "institution",
+                EntityImage.entity_id == institution_id,
+                EntityImage.is_featured == True,
+            )
         )
+        .first()
     )
-
-    result = await db.execute(query)
-    image = result.scalar_one_or_none()
 
     return image
 
 
 @router.get(
-    "/institutions/ipeds/{ipeds_id}/gallery", response_model=List[EntityImageResponse]
+    "/institutions/ipeds/{ipeds_id}/images", response_model=List[EntityImageResponse]
 )
-async def get_institution_gallery_by_ipeds(
-    ipeds_id: int, db: AsyncSession = Depends(get_db)
-):
-    """Get gallery images for an institution by IPEDS ID"""
-    from app.models.institution import Institution
-
+def get_institution_gallery_by_ipeds(ipeds_id: int, db: Session = Depends(get_db)):
+    """
+    Get gallery images for an institution by IPEDS ID.
+    More convenient since MagicScholar uses IPEDS IDs.
+    """
     # First get the institution
-    inst_result = await db.execute(
-        select(Institution).where(Institution.ipeds_id == ipeds_id)
-    )
-    institution = inst_result.scalar_one_or_none()
+    institution = db.query(Institution).filter(Institution.ipeds_id == ipeds_id).first()
 
     if not institution:
         raise HTTPException(status_code=404, detail="Institution not found")
 
     # Then get its gallery
-    query = (
-        select(EntityImage)
-        .where(
+    images = (
+        db.query(EntityImage)
+        .filter(
             and_(
                 EntityImage.entity_type == "institution",
                 EntityImage.entity_id == institution.id,
             )
         )
         .order_by(EntityImage.display_order, EntityImage.created_at)
+        .all()
     )
-
-    result = await db.execute(query)
-    images = result.scalars().all()
 
     return images
 
 
 @router.get(
-    "/scholarships/{scholarship_id}/gallery", response_model=List[EntityImageResponse]
+    "/institutions/ipeds/{ipeds_id}/featured",
+    response_model=Optional[EntityImageResponse],
 )
-async def get_scholarship_gallery(
-    scholarship_id: int, db: AsyncSession = Depends(get_db)
+def get_institution_featured_image_by_ipeds(
+    ipeds_id: int, db: Session = Depends(get_db)
 ):
-    """Get gallery images for a specific scholarship"""
-    query = (
-        select(EntityImage)
-        .where(
+    """
+    Get the featured image for an institution by IPEDS ID.
+    """
+    # First get the institution
+    institution = db.query(Institution).filter(Institution.ipeds_id == ipeds_id).first()
+
+    if not institution:
+        raise HTTPException(status_code=404, detail="Institution not found")
+
+    # Then get its featured image
+    image = (
+        db.query(EntityImage)
+        .filter(
+            and_(
+                EntityImage.entity_type == "institution",
+                EntityImage.entity_id == institution.id,
+                EntityImage.is_featured == True,
+            )
+        )
+        .first()
+    )
+
+    return image
+
+
+@router.get(
+    "/scholarships/{scholarship_id}/images", response_model=List[EntityImageResponse]
+)
+def get_scholarship_gallery(scholarship_id: int, db: Session = Depends(get_db)):
+    """
+    Get all gallery images for a scholarship.
+    PUBLIC endpoint.
+    """
+    images = (
+        db.query(EntityImage)
+        .filter(
             and_(
                 EntityImage.entity_type == "scholarship",
                 EntityImage.entity_id == scholarship_id,
             )
         )
         .order_by(EntityImage.display_order, EntityImage.created_at)
+        .all()
     )
-
-    result = await db.execute(query)
-    images = result.scalars().all()
 
     return images
 
 
 @router.get(
-    "/scholarships/{scholarship_id}/featured-image",
+    "/scholarships/{scholarship_id}/featured",
     response_model=Optional[EntityImageResponse],
 )
-async def get_scholarship_featured_image(
-    scholarship_id: int, db: AsyncSession = Depends(get_db)
-):
-    """Get the featured/primary image for a scholarship"""
-    query = select(EntityImage).where(
-        and_(
-            EntityImage.entity_type == "scholarship",
-            EntityImage.entity_id == scholarship_id,
-            EntityImage.is_featured == True,
+def get_scholarship_featured_image(scholarship_id: int, db: Session = Depends(get_db)):
+    """
+    Get the featured image for a scholarship.
+    PUBLIC endpoint.
+    """
+    image = (
+        db.query(EntityImage)
+        .filter(
+            and_(
+                EntityImage.entity_type == "scholarship",
+                EntityImage.entity_id == scholarship_id,
+                EntityImage.is_featured == True,
+            )
         )
+        .first()
     )
-
-    result = await db.execute(query)
-    image = result.scalar_one_or_none()
 
     return image
-
-
-@router.get("/featured-images")
-async def get_all_featured_images(db: AsyncSession = Depends(get_db)):
-    """Get all featured images for homepage carousel"""
-    from app.models.institution import Institution
-
-    query = (
-        select(EntityImage)
-        .where(EntityImage.is_featured == True)
-        .order_by(EntityImage.created_at.desc())
-    )
-
-    result = await db.execute(query)
-    featured_images = result.scalars().all()
-
-    enriched_results = []
-
-    for image in featured_images:
-        if image.entity_type == "institution":
-            inst_query = select(Institution).where(Institution.id == image.entity_id)
-            inst_result = await db.execute(inst_query)
-            institution = inst_result.scalar_one_or_none()
-
-            if institution:
-                enriched_results.append(
-                    {
-                        "id": image.id,
-                        "image_url": image.image_url,
-                        "cdn_url": image.cdn_url,
-                        "caption": image.caption,
-                        "entity_type": "institution",
-                        "entity_id": institution.id,
-                        "entity_name": institution.name,
-                        "entity_city": institution.city,
-                        "entity_state": institution.state,
-                        "entity_ipeds_id": institution.ipeds_id,
-                    }
-                )
-
-    return enriched_results
