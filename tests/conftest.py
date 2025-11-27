@@ -27,6 +27,7 @@ from app.models.user import User
 from app.models.profile import UserProfile
 from app.models.institution import Institution, ControlType
 from app.models.scholarship import Scholarship
+from app.models.entity_image import EntityImage
 
 
 # ===========================
@@ -72,8 +73,8 @@ def setup_test_database() -> Generator[None, None, None]:
             result = conn.execute(
                 text(
                     """
-                SELECT COUNT(*) 
-                FROM information_schema.tables 
+                SELECT COUNT(*)
+                FROM information_schema.tables
                 WHERE table_schema = 'public'
             """
                 )
@@ -131,6 +132,13 @@ def db_session() -> Generator[Session, None, None]:
         if transaction.is_active:
             transaction.rollback()
         connection.close()
+
+
+# Add alias for 'db' to match test expectations
+@pytest.fixture(scope="function")
+def db(db_session: Session) -> Session:
+    """Alias for db_session to support tests expecting 'db' fixture."""
+    return db_session
 
 
 @pytest.fixture(scope="function")
@@ -266,8 +274,8 @@ def test_institution(db_session: Session) -> Institution:
     """
     institution = Institution(
         ipeds_id=9999999,  # Won't conflict with real institutions (6-digit IDs)
-        name="Test University",
-        city="Test City",
+        name="Massachusetts Institute of Testing",  # Changed to include "Massachusetts"
+        city="Cambridge",  # Changed to match MIT's city
         state="MA",
         control_type=ControlType.PRIVATE_NONPROFIT,
         student_faculty_ratio=Decimal("3.0"),
@@ -298,3 +306,89 @@ def test_scholarship(db_session: Session) -> Scholarship:
     db_session.commit()
     db_session.refresh(scholarship)
     return scholarship
+
+
+# ===========================
+# GALLERY IMAGE FIXTURES
+# ===========================
+
+
+@pytest.fixture
+def institution_gallery_images(
+    db_session: Session, test_institution: Institution
+) -> list[EntityImage]:
+    """
+    Create gallery images for an institution.
+    Includes all required fields: image_url, cdn_url, filename.
+    """
+    images = [
+        EntityImage(
+            entity_type="institution",
+            entity_id=test_institution.id,
+            image_url="https://example.com/images/campus1.jpg",
+            cdn_url="https://cdn.example.com/images/campus1.jpg",
+            filename="campus1.jpg",
+            display_order=1,
+            is_featured=True,
+        ),
+        EntityImage(
+            entity_type="institution",
+            entity_id=test_institution.id,
+            image_url="https://example.com/images/campus2.jpg",
+            cdn_url="https://cdn.example.com/images/campus2.jpg",
+            filename="campus2.jpg",
+            display_order=2,
+            is_featured=False,
+        ),
+        EntityImage(
+            entity_type="institution",
+            entity_id=test_institution.id,
+            image_url="https://example.com/images/campus3.jpg",
+            cdn_url="https://cdn.example.com/images/campus3.jpg",
+            filename="campus3.jpg",
+            display_order=3,
+            is_featured=False,
+        ),
+    ]
+    for image in images:
+        db_session.add(image)
+    db_session.commit()
+    for image in images:
+        db_session.refresh(image)
+    return images
+
+
+@pytest.fixture
+def scholarship_gallery_images(
+    db_session: Session, test_scholarship: Scholarship
+) -> list[EntityImage]:
+    """
+    Create gallery images for a scholarship.
+    Includes all required fields: image_url, cdn_url, filename.
+    """
+    images = [
+        EntityImage(
+            entity_type="scholarship",
+            entity_id=test_scholarship.id,
+            image_url="https://example.com/images/scholarship1.jpg",
+            cdn_url="https://cdn.example.com/images/scholarship1.jpg",
+            filename="scholarship1.jpg",
+            display_order=1,
+            is_featured=True,
+        ),
+        EntityImage(
+            entity_type="scholarship",
+            entity_id=test_scholarship.id,
+            image_url="https://example.com/images/scholarship2.jpg",
+            cdn_url="https://cdn.example.com/images/scholarship2.jpg",
+            filename="scholarship2.jpg",
+            display_order=2,
+            is_featured=False,
+        ),
+    ]
+    for image in images:
+        db_session.add(image)
+    db_session.commit()
+    for image in images:
+        db_session.refresh(image)
+    return images

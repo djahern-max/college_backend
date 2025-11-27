@@ -1,7 +1,7 @@
-# app/schemas/institution.py - UPDATED WITH NEW DATA
+# app/schemas/institution.py - UPDATED WITH DATA QUALITY TRACKING
 """
 Streamlined institution schemas matching the simplified model
-UPDATED: Added admissions, enrollment, and graduation data
+UPDATED: Added admissions, enrollment, graduation data, and data quality tracking
 """
 
 from pydantic import BaseModel, Field
@@ -20,7 +20,28 @@ class ControlType(str, Enum):
 
 
 # ===========================
-# NEW: NESTED DATA SCHEMAS
+# NEW: DATA QUALITY SCHEMA
+# ===========================
+
+
+class DataQualityInfo(BaseModel):
+    """Data quality and verification information"""
+
+    admin_verified: bool = False
+    completeness_score: int = 0
+    cost_data_verified: bool = False
+    cost_data_verified_at: Optional[datetime] = None
+    admissions_data_verified: bool = False
+    admissions_data_verified_at: Optional[datetime] = None
+    last_admin_update: Optional[datetime] = None
+    data_freshness_days: Optional[int] = None  # Calculated field
+
+    class Config:
+        from_attributes = True
+
+
+# ===========================
+# NESTED DATA SCHEMAS
 # ===========================
 
 
@@ -85,7 +106,7 @@ class InstitutionBase(BaseModel):
     control_type: ControlType
     primary_image_url: Optional[str] = Field(None, max_length=500)
 
-    # NEW: Static institutional characteristics
+    # Static institutional characteristics
     student_faculty_ratio: Optional[Decimal] = Field(
         None, description="Student-faculty ratio"
     )
@@ -120,7 +141,7 @@ class InstitutionUpdate(BaseModel):
     control_type: Optional[ControlType] = None
     primary_image_url: Optional[str] = Field(None, max_length=500)
 
-    # NEW: Static characteristics
+    # Static characteristics
     student_faculty_ratio: Optional[Decimal] = None
     size_category: Optional[str] = None
     locale: Optional[str] = None
@@ -144,7 +165,7 @@ class InstitutionResponse(InstitutionBase):
 
 
 # ===========================
-# NEW: DETAILED RESPONSE WITH RELATED DATA
+# DETAILED RESPONSE WITH RELATED DATA
 # ===========================
 
 
@@ -168,6 +189,11 @@ class InstitutionDetailResponse(InstitutionBase):
     )
     graduation: Optional[GraduationSummary] = Field(
         None, description="Latest graduation data"
+    )
+
+    # NEW: Data quality information
+    data_quality: Optional[DataQualityInfo] = Field(
+        None, description="Data verification and quality metrics"
     )
 
     class Config:
@@ -207,7 +233,7 @@ class InstitutionSearchFilter(BaseModel):
     # Search
     search_query: Optional[str] = None
 
-    # NEW: Additional filters
+    # Additional filters
     size_category: Optional[str] = Field(
         None, description="Small/Medium/Large/Very Large"
     )
@@ -237,7 +263,7 @@ class InstitutionStats(BaseModel):
     by_state: dict[str, int]
     with_images: int
 
-    # NEW: Additional stats
+    # Additional stats
     by_size_category: Optional[dict[str, int]] = None
     avg_acceptance_rate: Optional[Decimal] = None
     avg_graduation_rate: Optional[Decimal] = None

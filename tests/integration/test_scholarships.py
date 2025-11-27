@@ -1,4 +1,3 @@
-# tests/integration/test_scholarships.py
 """
 Integration tests for scholarship endpoints.
 
@@ -313,8 +312,21 @@ class TestScholarshipFiltering:
 class TestScholarshipSorting:
     """Test scholarship sorting"""
 
-    def test_sort_by_amount_max_desc(self, client: TestClient):
+    def test_sort_by_amount_max_desc(self, client: TestClient, db_session: Session):
         """Test sorting by max amount descending"""
+        # Create scholarships with different amounts
+        amounts = [15000, 5000, 10000, 8000, 12000]
+        for i, amount in enumerate(amounts):
+            scholarship = Scholarship(
+                title=f"Scholarship {i}",
+                organization="Test Org",
+                scholarship_type="academic_merit",
+                amount_min=1000,
+                amount_max=amount,
+            )
+            db_session.add(scholarship)
+        db_session.commit()
+
         response = client.get(
             "/api/v1/scholarships/?sort_by=amount_max&sort_order=desc&limit=10"
         )
@@ -323,52 +335,87 @@ class TestScholarshipSorting:
         data = response.json()
         items_key = "items" if "items" in data else "scholarships"
 
-        # Just verify we got results (skip sort validation due to existing data)
         assert len(data[items_key]) > 0
-        assert "amount_max" in data[items_key][0]
 
-    def test_sort_by_deadline_asc(self, client: TestClient):
+        # Verify descending sort order
+        amounts_returned = [s["amount_max"] for s in data[items_key]]
+        assert amounts_returned == sorted(
+            amounts_returned, reverse=True
+        ), f"Expected descending order, got {amounts_returned}"
+
+    def test_sort_by_deadline_asc(self, client: TestClient, db_session: Session):
         """Test sorting by deadline ascending"""
+        # Create scholarships with different deadlines
+        deadlines = [
+            datetime.now() + timedelta(days=30),
+            datetime.now() + timedelta(days=10),
+            datetime.now() + timedelta(days=45),
+            datetime.now() + timedelta(days=20),
+        ]
+        for i, deadline in enumerate(deadlines):
+            scholarship = Scholarship(
+                title=f"Deadline Scholarship {i}",
+                organization="Test Org",
+                scholarship_type="academic_merit",
+                amount_min=1000,
+                amount_max=5000,
+                deadline=deadline,
+            )
+            db_session.add(scholarship)
+        db_session.commit()
+
         response = client.get(
             "/api/v1/scholarships/?sort_by=deadline&sort_order=asc&limit=10"
         )
 
         assert response.status_code == 200
+        data = response.json()
+        items_key = "items" if "items" in data else "scholarships"
 
-    def test_sort_by_created_at(self, client: TestClient):
+        assert len(data[items_key]) > 0
+
+        # Verify ascending sort order by deadline
+        deadlines_returned = [
+            (
+                datetime.fromisoformat(s["deadline"].replace("Z", "+00:00"))
+                if s.get("deadline")
+                else None
+            )
+            for s in data[items_key]
+        ]
+        # Filter out None values for comparison
+        valid_deadlines = [d for d in deadlines_returned if d is not None]
+        if valid_deadlines:
+            assert valid_deadlines == sorted(
+                valid_deadlines
+            ), f"Expected ascending deadline order"
+
+    def test_sort_by_created_at(self, client: TestClient, db_session: Session):
         """Test sorting by created_at"""
+        # Create scholarships
+        for i in range(3):
+            scholarship = Scholarship(
+                title=f"Created Scholarship {i}",
+                organization="Test Org",
+                scholarship_type="academic_merit",
+                amount_min=1000,
+                amount_max=5000,
+            )
+            db_session.add(scholarship)
+            db_session.flush()  # Ensure different timestamps
+        db_session.commit()
+
         response = client.get(
             "/api/v1/scholarships/?sort_by=created_at&sort_order=desc"
         )
 
         assert response.status_code == 200
+        data = response.json()
+        items_key = "items" if "items" in data else "scholarships"
 
-    @pytest.mark.xfail(
-        reason="Backend SQL syntax error with NULLS LAST ASC"
-    )  # ADD THIS LINE
-    def test_sort_by_deadline_asc(self, client: TestClient):
-        """Test sorting by deadline ascending"""
-        response = client.get(
-            "/api/v1/scholarships/?sort_by=deadline&sort_order=asc&limit=10"
-        )
-
-        assert response.status_code == 200
-
-    def test_sort_by_deadline_asc(self, client: TestClient):
-        """Test sorting by deadline ascending"""
-        response = client.get(
-            "/api/v1/scholarships/?sort_by=deadline&sort_order=asc&limit=10"
-        )
-
-        assert response.status_code == 200
-
-    def test_sort_by_created_at(self, client: TestClient):
-        """Test sorting by created_at"""
-        response = client.get(
-            "/api/v1/scholarships/?sort_by=created_at&sort_order=desc"
-        )
-
-        assert response.status_code == 200
+        assert len(data[items_key]) > 0
+        # Just verify we got results and they have created_at field
+        assert all("created_at" in s for s in data[items_key])
 
 
 @pytest.mark.integration
@@ -472,7 +519,7 @@ class TestScholarshipDelete:
         scholarship = Scholarship(
             title="To Be Deleted",
             organization="Test Org",
-            scholarship_type="academic_merit",  # ← Change this line (was "other")
+            scholarship_type="academic_merit",
             amount_min=1000,
             amount_max=5000,
         )

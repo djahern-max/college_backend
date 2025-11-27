@@ -1,7 +1,8 @@
 # app/models/institution.py
 """
-UPDATED Institution model - added IPEDS enrichment fields
-FIXED: Specify foreign_keys for relationships to avoid ambiguity
+Institution model - Core institutional data
+CLEANED: Removed deprecated admin verification fields
+These verification features now live in separate admin-specific models for Abacadaba
 """
 
 from sqlalchemy import (
