@@ -7,13 +7,11 @@ from app.models.user import User
 from app.models.profile import UserProfile
 from app.models.institution import Institution
 from app.models.scholarship import Scholarship
-from app.models.tuition import TuitionData
+
 from app.models.oauth import OAuthAccount, OAuthState
 
 # Admissions/Enrollment/Graduation
-from app.models.admissions import AdmissionsData
-from app.models.enrollment import EnrollmentData
-from app.models.graduation import GraduationData
+
 
 # NEW: Scholarship tracking
 from app.models.scholarship_applications import ScholarshipApplication
@@ -30,7 +28,6 @@ __all__ = [
     "UserProfile",
     "Institution",
     "Scholarship",
-    "TuitionData",
     "OAuthAccount",
     "OAuthState",
     "AdmissionsData",

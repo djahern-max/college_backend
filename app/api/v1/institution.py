@@ -88,8 +88,9 @@ async def get_institutions(
     if state:
         count_query = count_query.where(Institution.state == state.upper())
 
-    total_result = await db.execute(count_query)
-    total = total_result.scalar()  # FIXED: Use scalar() for single value
+    # Execute count query without streaming
+    result = await db.execute(count_query)
+    total = result.scalar()  # Get the count value
 
     # Sort by data completeness score (best schools first), then name
     query = query.order_by(Institution.data_completeness_score.desc(), Institution.name)
@@ -97,14 +98,26 @@ async def get_institutions(
     # Apply pagination
     query = query.limit(limit).offset(offset)
 
-    result = await db.execute(query)
-    institutions = result.scalars().all()  # Use scalars() for list of objects
+    # Execute institutions query
+    institutions_result = await db.execute(query)
+    institutions = (
+        institutions_result.scalars().all()
+    )  # Use scalars() for list of objects
 
     # Calculate pagination metadata
     total_pages = (total + limit - 1) // limit  # Ceiling division
 
+    # Clean up institution data - remove invalid default image URLs
+    items = []
+    for inst in institutions:
+        inst_dict = InstitutionResponse.model_validate(inst).model_dump()
+        # Remove the problematic default image URL
+        if inst_dict.get("primary_image_url") == "/images/default-institution.jpg":
+            inst_dict["primary_image_url"] = None
+        items.append(inst_dict)
+
     return {
-        "items": [InstitutionResponse.model_validate(inst) for inst in institutions],
+        "items": items,
         "total": total,
         "page": page,
         "limit": limit,

@@ -17,11 +17,10 @@ from app.models.user import User
 from app.models.profile import UserProfile
 from app.models.institution import Institution
 from app.models.scholarship import Scholarship
-from app.models.tuition import TuitionData
+
 from app.models.oauth import OAuthAccount, OAuthState
-from app.models.admissions import AdmissionsData
-from app.models.enrollment import EnrollmentData
-from app.models.graduation import GraduationData
+
+
 from app.models.scholarship_applications import ScholarshipApplication
 from app.models.college_applications import CollegeApplication
 from app.models.entity_image import EntityImage

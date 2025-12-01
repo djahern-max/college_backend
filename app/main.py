@@ -8,8 +8,6 @@ from app.api.v1 import (
     scholarships,
     institution,
     profiles,
-    costs,
-    admissions,
     scholarship_tracking,
     college_tracking,
     public_gallery,
@@ -45,8 +43,8 @@ app.include_router(
 )
 
 app.include_router(profiles.router, prefix="/api/v1/profiles", tags=["Profiles"])
-app.include_router(costs.router, prefix="/api/v1/costs", tags=["Costs"])
-app.include_router(admissions.router, prefix="/api/v1/admissions", tags=["Admissions"])
+
+
 app.include_router(
     scholarship_tracking.router,
     prefix="/api/v1/scholarship-tracking",

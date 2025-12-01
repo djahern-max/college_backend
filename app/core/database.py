@@ -1,46 +1,25 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.orm import declarative_base
 from app.core.config import settings
 
-# Create SQLAlchemy engine
-engine = create_engine(
-    settings.DATABASE_URL,
-    pool_pre_ping=True,
-    pool_recycle=300,
-    pool_size=5,
-    max_overflow=0,
+# Convert postgresql:// to postgresql+asyncpg://
+database_url = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+
+engine = create_async_engine(
+    database_url, echo=True, future=True  # Set to False in production
 )
 
-# Create SessionLocal class
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+AsyncSessionLocal = async_sessionmaker(
+    engine, class_=AsyncSession, expire_on_commit=False
+)
 
-# Create Base class for models
 Base = declarative_base()
 
 
-def get_db():
-    """
-    Database dependency for FastAPI endpoints.
-    Provides a database session that is automatically closed after use.
-    """
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-def create_tables():
-    """Create all database tables"""
-    # Import models to register them with SQLAlchemy
-    from app.models.user import User  # noqa
-    from app.models.profile import UserProfile  # noqa - ADD THIS LINE
-    from app.models.oauth import OAuthAccount  # noqa
-
-    Base.metadata.create_all(bind=engine)
-
-
-def drop_tables():
-    """Drop all database tables (for testing)"""
-    Base.metadata.drop_all(bind=engine)
+# Dependency for FastAPI
+async def get_db():
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()

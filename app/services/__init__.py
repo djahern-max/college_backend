@@ -9,6 +9,6 @@ They act as an abstraction layer between API endpoints and database models.
 from .user import UserService
 
 from .oauth import OAuthService
-from .tuition import TuitionService
+
 
 __all__ = ["UserService", "ProfileService", "OAuthService", "TuitionService"]
