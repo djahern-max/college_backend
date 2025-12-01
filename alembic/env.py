@@ -83,9 +83,10 @@ def run_migrations_offline() -> None:
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
-        dialect_opts={"paramstypes": "named"},
+        dialect_opts={"paramstyle": "named"},
         include_object=include_object,
         compare_type=True,
+        version_table="alembic_version_magicscholar",  # ADD THIS LINE
     )
 
     with context.begin_transaction():
@@ -93,11 +94,21 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    # Try environment variable first (production), fall back to alembic.ini (local)
+    database_url = os.getenv("DATABASE_URL")
+
+    if database_url:
+        # Production: use DATABASE_URL environment variable
+        from sqlalchemy import create_engine
+
+        connectable = create_engine(database_url, poolclass=pool.NullPool)
+    else:
+        # Local development: use alembic.ini
+        connectable = engine_from_config(
+            config.get_section(config.config_ini_section, {}),
+            prefix="sqlalchemy.",
+            poolclass=pool.NullPool,
+        )
 
     with connectable.connect() as connection:
         context.configure(
@@ -105,13 +116,8 @@ def run_migrations_online() -> None:
             target_metadata=target_metadata,
             include_object=include_object,
             compare_type=True,
+            version_table="alembic_version_magicscholar",  # ADD THIS LINE
         )
 
         with context.begin_transaction():
             context.run_migrations()
-
-
-if context.is_offline_mode():
-    run_migrations_offline()
-else:
-    run_migrations_online()
