@@ -125,6 +125,9 @@ class Scholarship(Base):
     created_at = Column(DateTime, default=func.now(), nullable=False)
     updated_at = Column(DateTime, onupdate=func.now())
 
+    # ===========================
+    # RELATIONSHIPS
+    # ===========================
     applications = relationship("ScholarshipApplication", back_populates="scholarship")
 
     def __repr__(self):

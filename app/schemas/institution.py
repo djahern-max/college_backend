@@ -1,7 +1,7 @@
-# app/schemas/institution.py - UPDATED WITH DATA QUALITY TRACKING
+# app/schemas/institution.py
 """
-Streamlined institution schemas matching the simplified model
-UPDATED: Added admissions, enrollment, graduation data, and data quality tracking
+Institution schemas for MagicScholar (Student-Facing App)
+Matches unified database structure
 """
 
 from pydantic import BaseModel, Field
@@ -20,47 +20,20 @@ class ControlType(str, Enum):
 
 
 # ===========================
-# NEW: DATA QUALITY SCHEMA
-# ===========================
-
-
-class DataQualityInfo(BaseModel):
-    """Data quality and verification information"""
-
-    admin_verified: bool = False
-    completeness_score: int = 0
-    cost_data_verified: bool = False
-    cost_data_verified_at: Optional[datetime] = None
-    admissions_data_verified: bool = False
-    admissions_data_verified_at: Optional[datetime] = None
-    last_admin_update: Optional[datetime] = None
-    data_freshness_days: Optional[int] = None  # Calculated field
-
-    class Config:
-        from_attributes = True
-
-
-# ===========================
-# NESTED DATA SCHEMAS
+# NESTED DATA SCHEMAS (for compatibility with other parts of app)
 # ===========================
 
 
 class AdmissionsSummary(BaseModel):
-    """Summary of admissions data for institution response"""
+    """Summary of admissions data"""
 
     academic_year: str
     acceptance_rate: Optional[Decimal] = None
-
-    # SAT ranges
-    sat_range: Optional[str] = Field(None, description="e.g. '1050-1250'")
+    sat_range: Optional[str] = None
     sat_math_median: Optional[int] = None
     sat_reading_median: Optional[int] = None
-
-    # ACT ranges
-    act_range: Optional[str] = Field(None, description="e.g. '21-26'")
+    act_range: Optional[str] = None
     act_composite_median: Optional[int] = None
-
-    # Application stats
     total_applications: Optional[int] = None
     total_admitted: Optional[int] = None
     total_enrolled: Optional[int] = None
@@ -93,7 +66,7 @@ class GraduationSummary(BaseModel):
 
 
 # ===========================
-# BASE SCHEMA (UPDATED)
+# BASE SCHEMA
 # ===========================
 
 
@@ -105,58 +78,58 @@ class InstitutionBase(BaseModel):
     state: str = Field(..., min_length=2, max_length=2)
     control_type: ControlType
     primary_image_url: Optional[str] = Field(None, max_length=500)
+    website: Optional[str] = Field(None, max_length=500)
 
-    # Static institutional characteristics
-    student_faculty_ratio: Optional[Decimal] = Field(
-        None, description="Student-faculty ratio"
-    )
-    size_category: Optional[str] = Field(
-        None, description="Small/Medium/Large/Very Large"
-    )
-    locale: Optional[str] = Field(None, description="City/Suburban/Town/Rural")
-
-
-# ===========================
-# CREATE SCHEMA (UPDATED)
-# ===========================
-
-
-class InstitutionCreate(InstitutionBase):
-    """Schema for creating a new institution"""
-
-    ipeds_id: int = Field(..., gt=0)
-
-
-# ===========================
-# UPDATE SCHEMA (UPDATED)
-# ===========================
-
-
-class InstitutionUpdate(BaseModel):
-    """Schema for updating an institution - all fields optional"""
-
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    city: Optional[str] = Field(None, min_length=1, max_length=100)
-    state: Optional[str] = Field(None, min_length=2, max_length=2)
-    control_type: Optional[ControlType] = None
-    primary_image_url: Optional[str] = Field(None, max_length=500)
-
-    # Static characteristics
+    # Characteristics
     student_faculty_ratio: Optional[Decimal] = None
     size_category: Optional[str] = None
     locale: Optional[str] = None
 
 
 # ===========================
-# RESPONSE SCHEMA (UPDATED)
+# RESPONSE SCHEMAS
 # ===========================
 
 
 class InstitutionResponse(InstitutionBase):
-    """Schema for institution API responses"""
+    """Standard institution response for public (student) endpoints"""
 
+    # Core Identity
     id: int
     ipeds_id: int
+
+    # Additional IPEDS fields
+    level: Optional[int] = None
+    control: Optional[int] = None
+
+    # Cost Data
+    tuition_in_state: Optional[Decimal] = None
+    tuition_out_of_state: Optional[Decimal] = None
+    tuition_private: Optional[Decimal] = None
+    tuition_in_district: Optional[Decimal] = None
+    room_cost: Optional[Decimal] = None
+    board_cost: Optional[Decimal] = None
+    room_and_board: Optional[Decimal] = None
+    application_fee_undergrad: Optional[Decimal] = None
+    application_fee_grad: Optional[Decimal] = None
+
+    # Admissions Data
+    acceptance_rate: Optional[Decimal] = None
+    sat_reading_25th: Optional[int] = None
+    sat_reading_75th: Optional[int] = None
+    sat_math_25th: Optional[int] = None
+    sat_math_75th: Optional[int] = None
+    act_composite_25th: Optional[int] = None
+    act_composite_75th: Optional[int] = None
+
+    # Data Quality (students can see this to know data reliability)
+    data_completeness_score: int
+    data_source: Optional[str] = None
+    ipeds_year: Optional[str] = None
+    is_featured: bool
+    admin_verified: bool
+
+    # Timestamps
     created_at: datetime
     updated_at: datetime
 
@@ -164,109 +137,99 @@ class InstitutionResponse(InstitutionBase):
         from_attributes = True
 
 
-# ===========================
-# DETAILED RESPONSE WITH RELATED DATA
-# ===========================
-
-
-class InstitutionDetailResponse(InstitutionBase):
-    """
-    Complete institution details including related data
-    Use this for individual institution pages
-    """
+class InstitutionSummary(BaseModel):
+    """Lightweight summary for list views (faster loading)"""
 
     id: int
     ipeds_id: int
-    created_at: datetime
-    updated_at: datetime
+    name: str
+    city: str
+    state: str
+    control_type: ControlType
+    primary_image_url: Optional[str] = None
+    student_faculty_ratio: Optional[Decimal] = None
+    data_completeness_score: int
+    is_featured: bool
 
-    # Related data (optional - only included when requested)
-    admissions: Optional[AdmissionsSummary] = Field(
-        None, description="Latest admissions data"
-    )
-    enrollment: Optional[EnrollmentSummary] = Field(
-        None, description="Latest enrollment data"
-    )
-    graduation: Optional[GraduationSummary] = Field(
-        None, description="Latest graduation data"
-    )
-
-    # NEW: Data quality information
-    data_quality: Optional[DataQualityInfo] = Field(
-        None, description="Data verification and quality metrics"
-    )
+    # Key stats for preview
+    tuition_in_state: Optional[Decimal] = None
+    tuition_out_of_state: Optional[Decimal] = None
+    acceptance_rate: Optional[Decimal] = None
 
     class Config:
         from_attributes = True
 
 
-# ===========================
-# LIST RESPONSE (UNCHANGED)
-# ===========================
+class InstitutionDetailResponse(InstitutionResponse):
+    """
+    Detailed institution response with additional computed fields.
+    Use this for individual institution detail pages.
+    """
+
+    # Inherits all fields from InstitutionResponse
+    # Can add computed fields here if needed in the future
+
+    class Config:
+        from_attributes = True
 
 
-class InstitutionList(BaseModel):
-    """Schema for paginated institution list"""
+class PaginatedInstitutionResponse(BaseModel):
+    """Paginated response wrapper"""
 
     institutions: list[InstitutionResponse]
-    total: int = Field(..., description="Total number of institutions")
-    page: int = Field(..., description="Current page number")
-    limit: int = Field(..., description="Results per page")
-    has_more: bool = Field(..., description="Whether more results exist")
+    total: int
+    page: int
+    limit: int
+    has_more: bool
 
 
-# ===========================
-# SEARCH FILTERS (UPDATED)
-# ===========================
+# Alias for compatibility
+InstitutionList = PaginatedInstitutionResponse
+
+
+class InstitutionStats(BaseModel):
+    """Statistics about institutions"""
+
+    total_institutions: int
+    by_control_type: dict
+    by_state: dict
+    with_images: int = 0
+
+    class Config:
+        from_attributes = True
 
 
 class InstitutionSearchFilter(BaseModel):
-    """Search filters with new fields"""
+    """Search filter parameters"""
 
     page: int = Field(1, ge=1)
-    limit: int = Field(20, ge=1, le=100)
-
-    # Existing filters
+    limit: int = Field(50, ge=1, le=100)
     state: Optional[str] = Field(None, min_length=2, max_length=2)
     control_type: Optional[ControlType] = None
-
-    # Search
     search_query: Optional[str] = None
-
-    # Additional filters
-    size_category: Optional[str] = Field(
-        None, description="Small/Medium/Large/Very Large"
-    )
-    min_acceptance_rate: Optional[float] = Field(None, ge=0, le=100)
-    max_acceptance_rate: Optional[float] = Field(None, ge=0, le=100)
-    min_sat: Optional[int] = Field(None, ge=400, le=1600)
-    max_sat: Optional[int] = Field(None, ge=400, le=1600)
-
-    # Sorting (updated with new fields)
-    sort_by: str = Field(
-        "name",
-        pattern="^(name|city|state|created_at|acceptance_rate|total_enrollment|graduation_rate_6_year)$",
-    )
+    sort_by: str = Field("name", pattern="^(name|city|state|data_completeness_score)$")
     sort_order: str = Field("asc", pattern="^(asc|desc)$")
 
 
 # ===========================
-# STATS SCHEMA (UPDATED)
+# CREATE/UPDATE SCHEMAS (for compatibility)
 # ===========================
 
 
-class InstitutionStats(BaseModel):
-    """Schema for institution statistics"""
+class InstitutionCreate(InstitutionBase):
+    """Schema for creating institution (admin use only - not used in MagicScholar)"""
 
-    total_institutions: int
-    by_control_type: dict[str, int]
-    by_state: dict[str, int]
-    with_images: int
+    ipeds_id: int = Field(..., gt=0)
 
-    # Additional stats
-    by_size_category: Optional[dict[str, int]] = None
-    avg_acceptance_rate: Optional[Decimal] = None
-    avg_graduation_rate: Optional[Decimal] = None
 
-    class Config:
-        from_attributes = True
+class InstitutionUpdate(BaseModel):
+    """Schema for updating institution (admin use only - not used in MagicScholar)"""
+
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    city: Optional[str] = Field(None, min_length=1, max_length=100)
+    state: Optional[str] = Field(None, min_length=2, max_length=2)
+    control_type: Optional[ControlType] = None
+    primary_image_url: Optional[str] = Field(None, max_length=500)
+    student_faculty_ratio: Optional[Decimal] = None
+    size_category: Optional[str] = None
+    locale: Optional[str] = None

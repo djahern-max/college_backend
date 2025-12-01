@@ -1,90 +1,48 @@
-# app/api/v1/institutions.py
+# app/api/v1/institution.py
+# FIXED: Proper route ordering - specific routes BEFORE generic routes
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from typing import List, Optional
+from typing import Optional
 from app.core.database import get_db
 from app.models.institution import Institution
 from app.schemas.institution import InstitutionResponse
-from pydantic import BaseModel
 
-router = APIRouter(prefix="/institutions", tags=["institutions"])
-
-
-class PaginatedInstitutionResponse(BaseModel):
-    """Paginated response for institutions"""
-
-    institutions: List[InstitutionResponse]
-    total: int
-    page: int
-    limit: int
-    has_more: bool
+# No prefix - main.py already adds /api/v1/institutions
+router = APIRouter()
 
 
-@router.get("", response_model=PaginatedInstitutionResponse)
-async def get_institutions(
-    state: Optional[str] = Query(None, max_length=2),
-    page: int = Query(1, ge=1),
-    limit: int = Query(100, ge=1, le=500),
-    db: AsyncSession = Depends(get_db),
+# ============================================================================
+# IMPORTANT: Route order matters!
+# Put specific routes (like /by-id/{id}) BEFORE generic catch-all routes
+# ============================================================================
+
+
+@router.get("/by-id/{institution_id}", response_model=InstitutionResponse)
+async def get_institution_by_id(
+    institution_id: int, db: AsyncSession = Depends(get_db)
 ):
     """
-    Get all institutions with pagination.
-
-    Args:
-        state: Optional state filter (2-letter code)
-        page: Page number (starts at 1)
-        limit: Results per page (max 500)
-        db: Database session
-
-    Returns:
-        Paginated response with institutions, total count, and pagination info
+    Get a single institution by database ID.
+    PUBLIC endpoint - no authentication required.
     """
-    # Build base query
-    query = select(Institution)
-    count_query = select(func.count(Institution.id))
-
-    # Apply filters
-    if state:
-        state_upper = state.upper()
-        query = query.where(Institution.state == state_upper)
-        count_query = count_query.where(Institution.state == state_upper)
-
-    # Get total count (for pagination metadata)
-    total_result = await db.execute(count_query)
-    total = total_result.scalar()
-
-    # Priority states first (NH, MA, VT, NY, FL, CA), then alphabetical
-    priority_states = ["NH", "MA", "VT", "NY", "FL", "CA"]
-    if not state:
-        # Custom sort: priority states first, then alphabetical
-        query = query.order_by(Institution.state, Institution.name)
-    else:
-        query = query.order_by(Institution.name)
-
-    # Apply pagination
-    offset = (page - 1) * limit
-    query = query.limit(limit).offset(offset)
-
-    # Execute query
+    query = select(Institution).where(Institution.id == institution_id)
     result = await db.execute(query)
-    institutions = result.scalars().all()
+    institution = result.scalar_one_or_none()
 
-    # Calculate if there are more pages
-    has_more = (offset + len(institutions)) < total
+    if not institution:
+        raise HTTPException(status_code=404, detail="Institution not found")
 
-    return PaginatedInstitutionResponse(
-        institutions=institutions,
-        total=total,
-        page=page,
-        limit=limit,
-        has_more=has_more,
-    )
+    return institution
 
 
+# This must come AFTER /by-id/{institution_id} but BEFORE the catch-all /
 @router.get("/{ipeds_id}", response_model=InstitutionResponse)
 async def get_institution(ipeds_id: int, db: AsyncSession = Depends(get_db)):
-    """Get a single institution by IPEDS ID"""
+    """
+    Get a single institution by IPEDS ID.
+    PUBLIC endpoint - no authentication required.
+    """
     query = select(Institution).where(Institution.ipeds_id == ipeds_id)
     result = await db.execute(query)
     institution = result.scalar_one_or_none()
@@ -95,16 +53,61 @@ async def get_institution(ipeds_id: int, db: AsyncSession = Depends(get_db)):
     return institution
 
 
-@router.get("/by-id/{institution_id}", response_model=InstitutionResponse)
-async def get_institution_by_id(
-    institution_id: int, db: AsyncSession = Depends(get_db)
+# This MUST be last - it's the most generic route
+@router.get("/")
+async def get_institutions(
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    limit: int = Query(48, ge=1, le=100, description="Items per page"),
+    state: Optional[str] = Query(
+        None, max_length=2, description="Filter by state code"
+    ),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Get a single institution by database ID"""
-    query = select(Institution).where(Institution.id == institution_id)
+    """
+    Get paginated institutions with optional state filter.
+    Returns institutions sorted by data completeness score.
+    PUBLIC endpoint - no authentication required.
+
+    Query params:
+    - page: Page number (default: 1)
+    - limit: Items per page (default: 48, max: 100)
+    - state: Optional 2-letter state code filter
+    """
+    # Calculate offset from page number
+    offset = (page - 1) * limit
+
+    # Build base query
+    query = select(Institution)
+
+    # Apply state filter if provided
+    if state:
+        query = query.where(Institution.state == state.upper())
+
+    # Get total count for pagination
+    count_query = select(func.count()).select_from(Institution)
+    if state:
+        count_query = count_query.where(Institution.state == state.upper())
+
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()  # FIXED: Use scalar() for single value
+
+    # Sort by data completeness score (best schools first), then name
+    query = query.order_by(Institution.data_completeness_score.desc(), Institution.name)
+
+    # Apply pagination
+    query = query.limit(limit).offset(offset)
+
     result = await db.execute(query)
-    institution = result.scalar_one_or_none()
+    institutions = result.scalars().all()  # Use scalars() for list of objects
 
-    if not institution:
-        raise HTTPException(status_code=404, detail="Institution not found")
+    # Calculate pagination metadata
+    total_pages = (total + limit - 1) // limit  # Ceiling division
 
-    return institution
+    return {
+        "items": [InstitutionResponse.model_validate(inst) for inst in institutions],
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "total_pages": total_pages,
+        "has_more": page < total_pages,
+    }
