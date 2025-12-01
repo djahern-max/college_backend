@@ -1,147 +1,213 @@
-# app/services/institution.py - SIMPLIFIED VERSION
+# app/api/v1/institution.py - CLEANED UP
 """
-Streamlined institution service - only uses fields that exist
-Removed references to dropped fields (customer_rank, image_quality, etc.)
+Simplified institutions API - only uses fields that exist in the model
+Removed all references to dropped fields (customer_rank, image_quality, etc.)
 """
 
-from typing import Optional, List, Tuple, Dict
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_, and_, desc, case
-from sqlalchemy.exc import SQLAlchemyError
-import logging
+from typing import Optional, List
+from sqlalchemy import func
 
-from app.models.institution import Institution, ControlType
-from app.schemas.institution import InstitutionSearchFilter
+from app.core.database import get_db
+from app.models.institution import Institution
+from app.schemas.institution import (
+    InstitutionResponse,
+    InstitutionList,
+    InstitutionSearchFilter,
+)
+from app.services.institution import InstitutionService
+
+import logging
 
 logger = logging.getLogger(__name__)
 
+router = APIRouter()
 
-class InstitutionService:
-    """Simplified service for institution operations"""
 
-    def __init__(self, db: Session):
-        self.db = db
+@router.get("/", response_model=InstitutionList)
+async def list_institutions(
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=100),
+    state: Optional[str] = Query(None, min_length=2, max_length=2),
+    control_type: Optional[str] = None,
+    search_query: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """List all institutions with optional filtering"""
+    try:
+        service = InstitutionService(db)
 
-    # ============================================================================
-    # BASIC CRUD
-    # ============================================================================
+        # Build search filter
+        filters = InstitutionSearchFilter(
+            page=page,
+            limit=limit,
+            state=state,
+            control_type=control_type,
+            search_query=search_query,
+        )
 
-    def get_institution_by_id(self, institution_id: int) -> Optional[Institution]:
-        """Get institution by database ID"""
-        try:
-            return (
-                self.db.query(Institution)
-                .filter(Institution.id == institution_id)
-                .first()
+        institutions, total = service.search_institutions(filters)
+
+        return InstitutionList(
+            institutions=[InstitutionResponse.model_validate(i) for i in institutions],
+            total=total,
+            page=page,
+            limit=limit,
+            has_more=page * limit < total,
+        )
+
+    except Exception as e:
+        logger.error(f"Error listing institutions: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list institutions: {str(e)}",
+        )
+
+
+@router.get("/search", response_model=InstitutionList)
+async def search_institutions(
+    query: str = Query(..., min_length=1),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=100),
+    state: Optional[str] = Query(None, min_length=2, max_length=2),
+    db: Session = Depends(get_db),
+):
+    """Search institutions by name or city"""
+    try:
+        service = InstitutionService(db)
+
+        filters = InstitutionSearchFilter(
+            page=page,
+            limit=limit,
+            state=state,
+            search_query=query,
+        )
+
+        institutions, total = service.search_institutions(filters)
+
+        return InstitutionList(
+            institutions=[InstitutionResponse.model_validate(i) for i in institutions],
+            total=total,
+            page=page,
+            limit=limit,
+            has_more=page * limit < total,
+        )
+
+    except Exception as e:
+        logger.error(f"Error searching institutions: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to search institutions: {str(e)}",
+        )
+
+
+@router.get("/states", response_model=List[str])
+async def get_available_states(db: Session = Depends(get_db)):
+    """Get list of states that have institutions"""
+    try:
+        service = InstitutionService(db)
+        states = service.get_available_states()
+        return states
+
+    except Exception as e:
+        logger.error(f"Error getting available states: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get available states: {str(e)}",
+        )
+
+
+@router.get("/{institution_id}", response_model=InstitutionResponse)
+async def get_institution(
+    institution_id: int,
+    db: Session = Depends(get_db),
+):
+    """Get a specific institution by ID"""
+    try:
+        service = InstitutionService(db)
+        institution = service.get_institution_by_id(institution_id)
+
+        if not institution:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Institution not found"
             )
-        except SQLAlchemyError as e:
-            logger.error(f"Error getting institution {institution_id}: {str(e)}")
-            raise
 
-    def get_institution_by_ipeds_id(self, ipeds_id: int) -> Optional[Institution]:
-        """Get institution by IPEDS ID"""
-        try:
-            return (
-                self.db.query(Institution)
-                .filter(Institution.ipeds_id == ipeds_id)
-                .first()
+        return InstitutionResponse.model_validate(institution)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting institution {institution_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get institution: {str(e)}",
+        )
+
+
+@router.get("/stats/summary", response_model=dict)
+async def get_institution_stats(db: Session = Depends(get_db)):
+    """Get institution statistics"""
+    try:
+        service = InstitutionService(db)
+
+        total = db.query(Institution).count()
+        by_state = {}
+        by_control = {}
+
+        # Get counts by state
+        states = (
+            db.query(Institution.state, func.count(Institution.id))
+            .group_by(Institution.state)
+            .all()
+        )
+        by_state = {state: count for state, count in states}
+
+        # Get counts by control type
+        controls = (
+            db.query(Institution.control_type, func.count(Institution.id))
+            .group_by(Institution.control_type)
+            .all()
+        )
+        by_control = {str(ctrl): count for ctrl, count in controls}
+
+        return {
+            "total_institutions": total,
+            "by_state": by_state,
+            "by_control_type": by_control,
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting institution stats: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get stats: {str(e)}",
+        )
+
+
+@router.get("/ipeds/{ipeds_id}", response_model=InstitutionResponse)
+async def get_institution_by_ipeds(
+    ipeds_id: int,
+    db: Session = Depends(get_db),
+):
+    """Get a specific institution by IPEDS ID"""
+    try:
+        institution = (
+            db.query(Institution).filter(Institution.ipeds_id == ipeds_id).first()
+        )
+
+        if not institution:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Institution not found"
             )
-        except SQLAlchemyError as e:
-            logger.error(f"Error getting institution with IPEDS {ipeds_id}: {str(e)}")
-            raise
 
-    # ============================================================================
-    # SEARCH & FILTERING
-    # ============================================================================
+        return InstitutionResponse.model_validate(institution)
 
-    def search_institutions(
-        self, filters: InstitutionSearchFilter
-    ) -> Tuple[List[Institution], int]:
-        """Search institutions with filters"""
-        try:
-            query = self.db.query(Institution)
-
-            # State filter
-            if filters.state:
-                query = query.filter(Institution.state == filters.state.upper())
-
-            # Control type filter
-            if filters.control_type:
-                try:
-                    control_type = ControlType(filters.control_type)
-                    query = query.filter(Institution.control_type == control_type)
-                except ValueError:
-                    logger.warning(f"Invalid control type: {filters.control_type}")
-
-            # Text search
-            if filters.search_query:
-                search_term = f"%{filters.search_query}%"
-                query = query.filter(
-                    or_(
-                        Institution.name.ilike(search_term),
-                        Institution.city.ilike(search_term),
-                    )
-                )
-
-            # Count total
-            total = query.count()
-
-            # Sorting with state priority
-            # Priority: AL, AR, then AK, then rest alphabetically
-            sort_column = getattr(Institution, filters.sort_by, Institution.name)
-
-            # Create a CASE statement for state priority
-            state_priority = case(
-                (Institution.state == "AL", 1),
-                (Institution.state == "AR", 2),
-                (Institution.state == "AK", 3),
-                else_=4,
-            )
-
-            # Apply sorting: first by state priority, then by the requested sort column
-            if filters.sort_order == "desc":
-                query = query.order_by(state_priority, desc(sort_column))
-            else:
-                query = query.order_by(state_priority, sort_column)
-
-            # Pagination
-            offset = (filters.page - 1) * filters.limit
-            institutions = query.offset(offset).limit(filters.limit).all()
-
-            return institutions, total
-
-        except SQLAlchemyError as e:
-            logger.error(f"Error searching institutions: {str(e)}")
-            raise
-
-    # ============================================================================
-    # UTILITY METHODS
-    # ============================================================================
-
-    def get_available_states(self) -> List[str]:
-        """Get list of states that have institutions"""
-        try:
-            states = (
-                self.db.query(Institution.state)
-                .distinct()
-                .order_by(Institution.state)
-                .all()
-            )
-            return [state[0] for state in states if state[0]]
-        except SQLAlchemyError as e:
-            logger.error(f"Error getting available states: {str(e)}")
-            raise
-
-    def get_by_state(self, state: str, limit: int = 50) -> List[Institution]:
-        """Get institutions by state"""
-        try:
-            return (
-                self.db.query(Institution)
-                .filter(Institution.state == state.upper())
-                .order_by(Institution.name)
-                .limit(limit)
-                .all()
-            )
-        except SQLAlchemyError as e:
-            logger.error(f"Error getting institutions for state {state}: {str(e)}")
-            raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting institution with IPEDS {ipeds_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get institution: {str(e)}",
+        )
