@@ -61,19 +61,19 @@ app.include_router(
 
 
 @app.get("/")
-async def root():
+def root():
     """Root endpoint"""
     return {"message": "CampusConnect API", "version": settings.APP_VERSION}
 
 
 @app.get("/health")
-async def health_check():
+def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "CampusConnect API"}
 
 
 @app.get("/routes-simple", response_class=PlainTextResponse)
-async def get_routes_simple():
+def get_routes_simple():
     """
     Returns a concise list of all routes with their paths and methods.
     """

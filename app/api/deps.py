@@ -1,96 +1,49 @@
-# app/api/deps.py
-
+# app/api/deps.py - SYNC VERSION
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
 from sqlalchemy.orm import Session
+
 from app.core.database import get_db
-from app.core.security import jwt
-from app.core.config import settings
+from app.core.security import ALGORITHM, SECRET_KEY
 from app.services.user import UserService
-from jose import JWTError
-import logging
+from app.models.user import User
 
-logger = logging.getLogger("auth")
-security = HTTPBearer()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
-def verify_token(token: str) -> dict:
+def get_current_user(
+    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+) -> User:
     """
-    Verify and decode a JWT token, return the full payload.
+    Dependency to get the current authenticated user.
+    Validates JWT token and returns the User object.
     """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
     try:
-        payload = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
-        )
-        return payload
-    except JWTError as e:
-        logger.error("JWT verification failed: %s", str(e))
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+
+        if user_id is None:
+            raise credentials_exception
+
+    except JWTError:
+        raise credentials_exception
+
+    user_service = UserService(db)
+    user = user_service.get_by_id(int(user_id))
+
+    if user is None:
+        raise credentials_exception
+
+    if not user.is_active:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user"
         )
 
-
-async def get_current_user(
-    token: str = Depends(security), db: Session = Depends(get_db)
-):
-    """Get current user from JWT token"""
-    try:
-        # Extract the actual token from the HTTPAuthorizationCredentials
-        if hasattr(token, "credentials"):
-            token_str = token.credentials
-        else:
-            token_str = str(token)
-
-        logger.info(
-            "Verifying token: %s",
-            token_str[:20] + "..." if len(token_str) > 20 else token_str,
-        )
-
-        # Verify the JWT token and get payload
-        payload = verify_token(token_str)
-        user_id = payload.get("sub")
-
-        if not user_id:
-            logger.error("No user ID found in token payload")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        # Get user from database
-        user_service = UserService(db)
-        user = user_service.get_by_id(int(user_id))
-
-        if not user:
-            logger.error("User not found for ID: %s", user_id)
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        if not user.is_active:
-            logger.error("User is not active: %s", user_id)
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User is inactive",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        logger.info("Successfully authenticated user: %s", user.email)
-
-        # CHANGED: Return the actual User object instead of dict
-        return user
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Token verification failed: %s", str(e))
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    return user

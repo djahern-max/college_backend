@@ -1,7 +1,33 @@
-from pydantic import BaseModel, EmailStr, validator
+# app/schemas/user.py
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional
 from datetime import datetime
 import re
+
+
+# Extract validators as module-level functions
+def validate_username(v: str) -> str:
+    """Reusable username validation logic"""
+    if not v:
+        raise ValueError("Username is required")
+    if len(v) < 3:
+        raise ValueError("Username must be at least 3 characters")
+    if len(v) > 50:
+        raise ValueError("Username must be less than 50 characters")
+    if not re.match(r"^[a-zA-Z0-9_-]+$", v):
+        raise ValueError(
+            "Username can only contain letters, numbers, underscores, and hyphens"
+        )
+    return v
+
+
+def validate_password(v: str) -> str:
+    """Reusable password validation logic"""
+    if len(v) < 6:
+        raise ValueError("Password must be at least 6 characters")
+    if len(v) > 100:
+        raise ValueError("Password must be less than 100 characters")
+    return v
 
 
 class UserBase(BaseModel):
@@ -12,20 +38,10 @@ class UserBase(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
 
-    @validator("username")
+    @field_validator("username")
+    @classmethod
     def username_validator(cls, v):
-        """Validate username format"""
-        if not v:
-            raise ValueError("Username is required")
-        if len(v) < 3:
-            raise ValueError("Username must be at least 3 characters")
-        if len(v) > 50:
-            raise ValueError("Username must be less than 50 characters")
-        if not re.match(r"^[a-zA-Z0-9_-]+$", v):
-            raise ValueError(
-                "Username can only contain letters, numbers, underscores, and hyphens"
-            )
-        return v
+        return validate_username(v)
 
 
 class UserCreate(UserBase):
@@ -33,14 +49,10 @@ class UserCreate(UserBase):
 
     password: str
 
-    @validator("password")
+    @field_validator("password")
+    @classmethod
     def password_validator(cls, v):
-        """Validate password strength"""
-        if len(v) < 6:
-            raise ValueError("Password must be at least 6 characters")
-        if len(v) > 100:
-            raise ValueError("Password must be less than 100 characters")
-        return v
+        return validate_password(v)
 
     class Config:
         json_schema_extra = {
@@ -63,18 +75,12 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = None
     is_active: Optional[bool] = None
 
-    @validator("username")
+    @field_validator("username")
+    @classmethod
     def username_validator(cls, v):
         """Validate username format if provided"""
         if v is not None:
-            if len(v) < 3:
-                raise ValueError("Username must be at least 3 characters")
-            if len(v) > 50:
-                raise ValueError("Username must be less than 50 characters")
-            if not re.match(r"^[a-zA-Z0-9_-]+$", v):
-                raise ValueError(
-                    "Username can only contain letters, numbers, underscores, and hyphens"
-                )
+            return validate_username(v)
         return v
 
 
@@ -86,7 +92,7 @@ class UserResponse(UserBase):
     created_at: datetime
 
     class Config:
-        from_attributes = True  # Allows conversion from SQLAlchemy models
+        from_attributes = True
         json_schema_extra = {
             "example": {
                 "id": 1,
@@ -98,17 +104,3 @@ class UserResponse(UserBase):
                 "created_at": "2025-01-01T10:00:00Z",
             }
         }
-
-
-class UserInDB(UserBase):
-    """Schema for user data stored in database (internal use)"""
-
-    id: int
-    hashed_password: Optional[str]
-    is_active: bool
-    is_superuser: bool
-    created_at: datetime
-    updated_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True

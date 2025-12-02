@@ -1,6 +1,8 @@
+# app/services/user.py - SYNC VERSION
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
@@ -54,7 +56,7 @@ class UserService:
         for field, value in update_data.items():
             setattr(db_user, field, value)
 
-        db_user.updated_at = datetime.utcnow()
+        db_user.updated_at = datetime.now(timezone.utc)
         self.db.commit()
         self.db.refresh(db_user)
         return db_user

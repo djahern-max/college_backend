@@ -1,16 +1,14 @@
 """
 Shared test fixtures and configuration for MagicScholar backend tests.
-Configured for SYNC SQLAlchemy (not async).
+SYNC version - matches sync SQLAlchemy backend.
 """
 
 import os
 
 # 🔐 Force tests to use a dedicated test database
-# This overrides whatever is in .env (like unified_db)
 os.environ["DATABASE_URL"] = (
     "postgresql://postgres:postgres@localhost:5432/unified_test"
 )
-
 
 import pytest
 from typing import Generator, Dict
@@ -35,41 +33,25 @@ from app.models.entity_image import EntityImage
 # ===========================
 
 TEST_DATABASE_URL = os.environ["DATABASE_URL"]
-
-# For Postgres we do NOT need StaticPool; a normal engine is fine
 test_engine = create_engine(TEST_DATABASE_URL)
-
 TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 
 # ===========================
-# SCHEMA SETUP (ONCE PER TEST RUN)
+# SCHEMA SETUP
 # ===========================
 
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_database() -> Generator[None, None, None]:
-    """
-    Set up test database - handle both fresh and template-copied databases.
-
-    Since unified_test was created from unified_db template, it already has:
-    - All tables created
-    - Alembic version history
-
-    We just need to ensure the schema is current without re-running migrations.
-    """
+    """Set up test database schema."""
     print(f"\n🔧 Setting up test database: unified_test")
 
-    # Option 1: Just use the existing database as-is
-    # Since it was copied from unified_db, it should have all tables
-    # We'll just verify the connection works
     try:
         with test_engine.connect() as conn:
-            # Test connection
             result = conn.execute(text("SELECT 1"))
             print("✅ Test database connection verified")
 
-            # Check if tables exist
             result = conn.execute(
                 text(
                     """
@@ -84,26 +66,12 @@ def setup_test_database() -> Generator[None, None, None]:
 
     except Exception as e:
         print(f"❌ Database setup error: {e}")
-        # If connection fails, try to create tables
         print("Creating tables from scratch...")
         Base.metadata.create_all(bind=test_engine)
 
     yield
 
-    # Cleanup: Drop all data but keep schema
-    # This allows the next test run to start fresh
     print("\n🧹 Cleaning up test database...")
-    # We don't drop tables, just truncate them if needed
-
-
-@pytest.fixture(scope="function", autouse=True)
-def cleanup_data(db_session: Session) -> Generator[None, None, None]:
-    """
-    Clean up test data after each test.
-    Since we're using transactions that rollback, this is mostly a safety net.
-    """
-    yield
-    # The transaction rollback in db_session handles cleanup
 
 
 # ===========================
@@ -115,10 +83,6 @@ def cleanup_data(db_session: Session) -> Generator[None, None, None]:
 def db_session() -> Generator[Session, None, None]:
     """
     Provide a transactional database session that rolls back after each test.
-
-    - Starts a transaction at the connection level
-    - Yields a Session bound to that connection
-    - Rolls back the transaction at the end so the DB is clean for the next test
     """
     connection = test_engine.connect()
     transaction = connection.begin()
@@ -128,13 +92,11 @@ def db_session() -> Generator[Session, None, None]:
         yield session
     finally:
         session.close()
-        # Avoid SAWarning: only roll back if still active
         if transaction.is_active:
             transaction.rollback()
         connection.close()
 
 
-# Add alias for 'db' to match test expectations
 @pytest.fixture(scope="function")
 def db(db_session: Session) -> Session:
     """Alias for db_session to support tests expecting 'db' fixture."""
@@ -264,18 +226,10 @@ def test_profile(db_session: Session, test_user: User) -> UserProfile:
 
 @pytest.fixture
 def test_institution(db_session: Session) -> Institution:
-    """
-    Create a test institution with unique IPEDS ID.
-
-    Uses 9999999 to avoid conflicts with real institutions in unified_test.
-    Since unified_test was created from unified_db template, it contains
-    real institutions like MIT (166027). Using a high test ID prevents
-    duplicate key violations.
-    """
     institution = Institution(
-        ipeds_id=9999999,  # Won't conflict with real institutions (6-digit IDs)
-        name="Massachusetts Institute of Testing",  # Changed to include "Massachusetts"
-        city="Cambridge",  # Changed to match MIT's city
+        ipeds_id=9999999,
+        name="Massachusetts Institute of Testing",
+        city="Cambridge",
         state="MA",
         control_type=ControlType.PRIVATE_NONPROFIT,
         student_faculty_ratio=Decimal("3.0"),
@@ -293,7 +247,7 @@ def test_scholarship(db_session: Session) -> Scholarship:
     scholarship = Scholarship(
         title="Test STEM Scholarship",
         organization="Test Foundation",
-        scholarship_type="stem",  # must match your actual enum/text values
+        scholarship_type="stem",
         amount_min=5000,
         amount_max=10000,
         deadline=datetime.now() + timedelta(days=60),
@@ -308,19 +262,10 @@ def test_scholarship(db_session: Session) -> Scholarship:
     return scholarship
 
 
-# ===========================
-# GALLERY IMAGE FIXTURES
-# ===========================
-
-
 @pytest.fixture
 def institution_gallery_images(
     db_session: Session, test_institution: Institution
 ) -> list[EntityImage]:
-    """
-    Create gallery images for an institution.
-    Includes all required fields: image_url, cdn_url, filename.
-    """
     images = [
         EntityImage(
             entity_type="institution",
@@ -362,10 +307,6 @@ def institution_gallery_images(
 def scholarship_gallery_images(
     db_session: Session, test_scholarship: Scholarship
 ) -> list[EntityImage]:
-    """
-    Create gallery images for a scholarship.
-    Includes all required fields: image_url, cdn_url, filename.
-    """
     images = [
         EntityImage(
             entity_type="scholarship",
