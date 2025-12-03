@@ -166,6 +166,12 @@ async def update_user_settings(
     )
 
     if not profile:
+        profile_service = ProfileService(db)
+        profile = profile_service.create_profile(
+            user_id=current_user.id, profile_data=ProfileCreate()
+        )
+
+    if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
 
     # Get existing settings or initialize with defaults

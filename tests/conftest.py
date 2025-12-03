@@ -206,11 +206,13 @@ def admin_headers(admin_token: str) -> Dict[str, str]:
 
 @pytest.fixture
 def test_profile(db_session: Session, test_user: User) -> UserProfile:
+    """Create a test profile with basic academic info"""
     profile = UserProfile(
         user_id=test_user.id,
-        high_school="Test High School",
+        high_school_name="Test High School",  # ✅ Not 'high_school'
         graduation_year=2025,
         gpa=3.8,
+        gpa_scale="4.0",
         sat_score=1400,
         act_score=32,
         intended_major="Computer Science",
@@ -221,7 +223,7 @@ def test_profile(db_session: Session, test_user: User) -> UserProfile:
     db_session.add(profile)
     db_session.commit()
     db_session.refresh(profile)
-    return profile
+    return profile  # ✅ MUST HAVE THIS LINE!
 
 
 @pytest.fixture
